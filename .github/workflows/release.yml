@@ -33,8 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+      - name: Select Xcode (latest stable)
+        # xcodegen 默认输出的 pbxproj 用 format 77 (Xcode 16+),
+        # 老版 Xcode 读不了,所以锁最新稳定版。
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
       - name: Install xcodegen
         run: brew install xcodegen
