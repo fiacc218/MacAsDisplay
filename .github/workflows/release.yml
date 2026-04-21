@@ -112,22 +112,53 @@ jobs:
           codesign -dv --verbose=4 MacAsDisplay.app 2>&1 | head -30
           codesign --verify --deep --strict --verbose=2 MacAsDisplay.app
 
+      - name: Re-sign nested binaries with Developer ID
+        # xcodebuild 主 binary 已签,但嵌入的 Swift runtime / helper 可能残留
+        # 非 hardened 或非 timestamp 的旧签名 —— 用 --deep --force 强制整包统一。
+        # 这是 notarization 失败最常见的原因。
+        working-directory: build/Build/Products/Release
+        run: |
+          set -euo pipefail
+          codesign --force --deep --options=runtime --timestamp \
+            --sign "$SIGN_IDENTITY" \
+            --entitlements "$GITHUB_WORKSPACE/App/MacAsDisplay.entitlements" \
+            MacAsDisplay.app
+          codesign --verify --deep --strict --verbose=2 MacAsDisplay.app
+
       - name: Notarize app
-        # 把 .app 打成 zip 送公证(notarytool 接受 zip/dmg/pkg),然后 staple 回 .app。
-        # --wait 会阻塞直到 Apple 返回,通常 1-5 分钟。
+        # --wait 阻塞直到 Apple 返回,通常 1-5 分钟。
+        # 无论成功失败都拉一次 notarytool log,Apple 的 issues 数组说明哪个文件哪条规则没过。
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
         working-directory: build/Build/Products/Release
         run: |
-          set -euo pipefail
+          set -uo pipefail
           ditto -c -k --keepParent MacAsDisplay.app MacAsDisplay-notarize.zip
 
+          SUBMIT_OUTPUT=$(mktemp)
+          set +e
           xcrun notarytool submit MacAsDisplay-notarize.zip \
             --apple-id "$APPLE_ID" \
             --password "$APP_SPECIFIC_PASSWORD" \
             --team-id "$TEAM_ID" \
-            --wait
+            --wait 2>&1 | tee "$SUBMIT_OUTPUT"
+          NOTARIZE_RC=${PIPESTATUS[0]}
+          set -e
+
+          SUB_ID=$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$SUBMIT_OUTPUT" | head -1)
+          if [ -n "$SUB_ID" ]; then
+            echo "=== Apple notarization log for $SUB_ID ==="
+            xcrun notarytool log "$SUB_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_SPECIFIC_PASSWORD" \
+              --team-id "$TEAM_ID" || true
+          fi
+
+          if [ "$NOTARIZE_RC" != "0" ]; then
+            echo "::error::notarytool submit exited with $NOTARIZE_RC"
+            exit $NOTARIZE_RC
+          fi
 
           xcrun stapler staple MacAsDisplay.app
           spctl -a -vv -t exec MacAsDisplay.app || true
