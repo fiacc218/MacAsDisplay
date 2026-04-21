@@ -59,11 +59,25 @@ cable you already own.
 ```sh
 git clone https://github.com/fiacc218/MacAsDisplay.git
 cd MacAsDisplay
-xcodegen generate
-open MacAsDisplay.xcodeproj
+brew install xcodegen            # one-time
+./build.sh all                   # → build/Build/Products/Debug/*.app
 ```
 
-Two schemes: **Sender** and **Receiver**. Build each on its machine.
+That's it. `build.sh` regenerates the xcodeproj when `project.yml` changes,
+then builds both schemes. Common invocations:
+
+| Command | What it does |
+|---|---|
+| `./build.sh sender` | Local Sender build. |
+| `./build.sh receiver` | Receiver, cross-compiled `x86_64` by default (for old Intel Macs). |
+| `./build.sh all` | Both of the above. |
+| `./build.sh deploy user@old-mac` | Build Receiver → rsync → ad-hoc codesign → relaunch on remote. |
+| `CONFIG=Release ./build.sh all` | Release build instead of Debug. |
+| `RECEIVER_ARCH=arm64 ./build.sh receiver` | Apple-Silicon Receiver. |
+| `./build.sh clean` | Wipe `build/` and regenerated `.xcodeproj`. |
+
+Prefer the IDE? `xcodegen generate && open MacAsDisplay.xcodeproj` still works
+— the two schemes (**Sender** / **Receiver**) show up in Xcode as usual.
 
 ### Signing (optional but recommended)
 
@@ -88,8 +102,7 @@ without re-permissioning.
 ### 1. Sender (on your primary Mac)
 
 ```sh
-xcodebuild -scheme Sender -configuration Debug \
-    -derivedDataPath build build
+./build.sh sender
 open build/Build/Products/Debug/MacAsDisplaySender.app
 ```
 
@@ -105,14 +118,39 @@ to open the popover — target host, start/stop, status.
 
 ### 2. Receiver (on your old Mac)
 
-```sh
-# If cross-compiling from Apple Silicon → Intel:
-xcodebuild -scheme Receiver -configuration Debug \
-    -derivedDataPath build -arch x86_64 ONLY_ACTIVE_ARCH=NO build
+Three ways, pick whichever fits.
 
-# Then copy the .app to the old Mac and:
-open /path/to/MacAsDisplayReceiver.app
+**A — one-liner install (recommended, no Xcode on old Mac).** On the old
+Mac, open Terminal and paste:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/fiacc218/MacAsDisplay/main/install.sh | sh
 ```
+
+Downloads the latest pre-built Receiver from GitHub Releases, strips macOS
+quarantine, ad-hoc re-signs, installs to `/Applications/`, launches. The
+script is 50 lines, sitting at `install.sh` in the repo — read it first if
+you prefer (`curl -fsSL ...install.sh | less`).
+
+**B — build on the old Mac itself (for hackers).** Old Mac has Xcode?
+Skip the deploy dance entirely:
+
+```sh
+git clone https://github.com/fiacc218/MacAsDisplay.git
+cd MacAsDisplay && brew install xcodegen && ./build.sh receiver
+open build/Build/Products/Debug/MacAsDisplayReceiver.app
+```
+
+**C — cross-compile + ssh deploy from primary Mac (dev loop).**
+
+```sh
+./build.sh deploy user@old-mac        # rsync to /Applications + auto-launch
+# or ./build.sh deploy user@old-mac:/custom/path
+```
+
+> Prereq: old Mac has **System Settings → General → Sharing → Remote
+> Login** (SSH) on. Recommend adding the primary Mac's public key to
+> `~/.ssh/authorized_keys` for passwordless deploys.
 
 The Receiver opens a full-screen black window and starts announcing its
 capability every 2 s. Press **ESC** to exit full-screen; ESC again to quit.
