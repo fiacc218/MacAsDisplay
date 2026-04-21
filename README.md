@@ -1,5 +1,7 @@
 # MacAsDisplay
 
+**English** | [中文](README.zh.md)
+
 Turn an older Mac into a second display for your newer Mac over Thunderbolt
 Bridge or Wi-Fi. HEVC hardware-encoded, 30 fps at native retina resolution,
 ~1 frame of latency on a good link.
