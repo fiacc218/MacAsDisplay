@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>MacAsDisplay Sender</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- 菜单栏 app:无 Dock icon,无 App 切换菜单。通过状态栏图标交互。 -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <!-- 屏幕录制 —— TCC 勾子,macOS 会在首次调用 SCShareableContent 时弹窗 -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>需要捕获虚拟屏画面并推流到副屏。</string>
+
+    <!-- 本地网络 —— Thunderbolt Bridge 属于本地网络 -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>需要通过 Thunderbolt Bridge / 局域网向接收端发送画面数据。</string>
+</dict>
+</plist>

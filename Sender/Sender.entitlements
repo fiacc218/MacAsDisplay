@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 关闭 Sandbox:CGVirtualDisplay 是私有 API,Sandbox 会拦。
+         自用不上架,不考虑公证之外的限制。 -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+
+    <!-- 网络权限(Hardened Runtime 默认允许 outbound,这里显式声明) -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+</dict>
+</plist>

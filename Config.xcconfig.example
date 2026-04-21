@@ -1,0 +1,13 @@
+// Local override for signing. Copy this file to Config.xcconfig (gitignored)
+// and fill in your own values to avoid TCC re-prompting every rebuild.
+//
+// Find your identity:  security find-identity -v -p codesigning
+// Find your team ID:   xcrun xcodebuild -find-identity  (or from developer.apple.com)
+
+// CODE_SIGN_IDENTITY = Apple Development: Your Name (ABCDE12345)
+// DEVELOPMENT_TEAM   = ABCDE12345
+// CODE_SIGN_STYLE    = Manual
+
+// For a notarized Release build:
+// CODE_SIGN_IDENTITY = Developer ID Application: Your Name (ABCDE12345)
+// ENABLE_HARDENED_RUNTIME = YES

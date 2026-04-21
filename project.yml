@@ -1,0 +1,117 @@
+# XcodeGen spec. 生成 Xcode 工程:
+#     brew install xcodegen && xcodegen generate
+# 之后打开 MacAsDisplay.xcodeproj 即可。
+#
+# 为什么用 XcodeGen:
+#   - Swift-C++ Interop 在 Xcode app target 上比 SwiftPM 稳;
+#   - pbxproj 纯文本难维护,用 YAML 作为唯一来源更清晰;
+#   - 新增文件只需重跑 `xcodegen`,不用在 Xcode 里点来点去。
+#
+# xcodeproj 是派生物,不进 repo(见 .gitignore)。clone 后执行:
+#     xcodegen generate && open MacAsDisplay.xcodeproj
+
+name: MacAsDisplay
+options:
+  bundleIdPrefix: xyz.dashuo.macasdisplay
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+# Config.xcconfig(gitignored)存在就吃进来,里面放本地签名身份。
+# 有身份 = TCC 权限跨 rebuild 永久保留;没有就 fallback 到 adhoc(每次问一遍)。
+configFiles:
+  Debug: Config.xcconfig
+  Release: Config.xcconfig
+
+# 所有 target 共享的 build settings
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+    # ---------- C++ 标准 ----------
+    CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+    CLANG_CXX_LIBRARY: "libc++"
+    GCC_C_LANGUAGE_STANDARD: "gnu17"
+
+    # ---------- Swift ↔ C++ Interop ----------
+    # Xcode UI: "Build Settings → C++ and Objective-C Interoperability"
+    SWIFT_OBJC_INTEROP_MODE: "objcxx"
+    # 兼容旧/新 Xcode:直接把 flag 塞给 swiftc
+    OTHER_SWIFT_FLAGS: "$(inherited) -cxx-interoperability-mode=default"
+
+    # ---------- 签名 ----------
+    # 签名身份(CODE_SIGN_IDENTITY / DEVELOPMENT_TEAM / CODE_SIGN_STYLE)
+    # **不写在这里**,原因:
+    # xcodegen 把 settings.base 塞进 pbxproj 的 buildSettings,而 buildSettings
+    # 的优先级高于 baseConfigurationReference(xcconfig)—— 写在这里会覆盖
+    # xcconfig,xcconfig 等于没用。
+    #
+    # 所以签名配置全放 `Config.xcconfig`(gitignored)。文件不存在时,
+    # Xcode 默认 CODE_SIGN_IDENTITY 为 "-"(adhoc)—— 克隆就能 build。
+    # 开发者拷 `Config.xcconfig.example` 改成自己的,TCC 就一劳永逸。
+    CODE_SIGNING_REQUIRED: YES
+    CODE_SIGNING_ALLOWED: YES
+    ENABLE_HARDENED_RUNTIME: NO
+
+    # ---------- 警告 ----------
+    CLANG_WARN_DOCUMENTATION_COMMENTS: YES
+    GCC_WARN_ABOUT_MISSING_NEWLINE: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+
+  # ========================================================
+  # Sender — M2 Max 上跑,创建虚拟屏 / 捕获 / 编码 / 发 UDP
+  # ========================================================
+  Sender:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sender
+        excludes:
+          - "Info.plist"
+          - "Sender.entitlements"
+          - "Sender-Bridging-Header.h"
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: "MacAsDisplaySender"
+        PRODUCT_BUNDLE_IDENTIFIER: "xyz.dashuo.macasdisplay.sender"
+        INFOPLIST_FILE: "Sender/Info.plist"
+        CODE_SIGN_ENTITLEMENTS: "Sender/Sender.entitlements"
+        SWIFT_OBJC_BRIDGING_HEADER: "Sender/Sender-Bridging-Header.h"
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Shared/Cpp"
+          - "$(SRCROOT)/Sender/Cpp"
+          - "$(SRCROOT)/Sender/ObjC"
+        OTHER_LDFLAGS: "$(inherited)"
+
+  # ========================================================
+  # Receiver — Intel MBP 上跑,收 UDP / 解码 / Metal 全屏
+  # ========================================================
+  Receiver:
+    type: application
+    platform: macOS
+    sources:
+      - path: Receiver
+        excludes:
+          - "Info.plist"
+          - "Receiver.entitlements"
+          - "Receiver-Bridging-Header.h"
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: "MacAsDisplayReceiver"
+        PRODUCT_BUNDLE_IDENTIFIER: "xyz.dashuo.macasdisplay.receiver"
+        INFOPLIST_FILE: "Receiver/Info.plist"
+        CODE_SIGN_ENTITLEMENTS: "Receiver/Receiver.entitlements"
+        SWIFT_OBJC_BRIDGING_HEADER: "Receiver/Receiver-Bridging-Header.h"
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/Shared/Cpp"
+          - "$(SRCROOT)/Receiver/Cpp"

@@ -1,0 +1,46 @@
+# Xcode build output
+build/
+DerivedData/
+*.xcworkspace/
+*.xcuserdata/
+xcuserdata/
+
+# Xcode project —— pbxproj 由 xcodegen 从 project.yml 生成,是派生物。
+# clone 后跑 `xcodegen generate` 即可,pbxproj 不进仓库(减少 diff 噪音,
+# 避免 Xcode 回写 Team ID / 本地路径等本地化信息)。
+*.xcodeproj/
+
+# 用户本地的 xcconfig 覆盖(签名 / 团队 ID 等)
+Config.xcconfig
+*.local.xcconfig
+
+# PSK —— 绝不能进 repo
+psk
+*.psk
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Claude Code 本地会话记录(包含绝对路径、内网 IP 等本地信息)
+.claude/
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
