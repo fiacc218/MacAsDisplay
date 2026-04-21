@@ -1,5 +1,5 @@
 # Release CI —— push tag (v*) 触发,构建 MacAsDisplay Universal .app,
-# 打 DMG,发 GitHub Release。
+# 用 Developer ID 签名 + Apple 公证 + 打 DMG,发 GitHub Release。
 #
 # 为什么 macos-14 runner:
 #   - 自带 Xcode 15+,满足 project.yml 的 MACOSX_DEPLOYMENT_TARGET=14.0
@@ -9,17 +9,20 @@
 #   - Receiver 目标机器可能是任意老 Mac(Intel 或 Apple Silicon)
 #   - 一个 .app 双端复用(启动时选择角色),覆盖所有场景
 #
-# 为什么 DMG 而不是 zip:
-#   - 用户拖拽 /Applications 的直觉最低摩擦
-#   - DMG 内自带 /Applications 符号链接,不用 Finder 手动导航
-#   - 避免 zip 解压后 Gatekeeper quarantine 的 "xxx.app 已损坏" 困扰
+# 签名 / 公证:
+#   - Developer ID Application 证书(Team QP7S33275H)→ 可分发
+#   - hardened runtime + 安全时间戳 → notarytool 接受
+#   - stapler staple 到 .app → 离线启动也能过 Gatekeeper
+#   - 用户双击 DMG,拖 .app 到 /Applications,双击 → 无任何警告
 #
-# 签名:
-#   - 使用 ad-hoc (CODE_SIGN_IDENTITY=-),零账号依赖
-#   - 用户首次打开右键 Open 绕过 Gatekeeper 即可
+# 所需 Repository Secrets:
+#   DEVELOPER_ID_P12_BASE64 —— Developer ID Application 证书导出的 .p12 的 base64
+#   P12_PASSWORD            —— 上面 .p12 设置的导出密码
+#   APPLE_ID                —— Apple 账号邮箱 (notarytool 登录)
+#   APP_SPECIFIC_PASSWORD   —— appleid.apple.com 生成的 App 专用密码
 #
 # 触发:
-#   git tag v0.1.0 && git push origin v0.1.0
+#   git tag v0.1.1 && git push origin v0.1.1
 
 name: Release
 
@@ -32,6 +35,10 @@ on:
 permissions:
   contents: write  # 发 Release 要写权限
 
+env:
+  TEAM_ID: QP7S33275H
+  SIGN_IDENTITY: "Developer ID Application: Shuo Yang (QP7S33275H)"
+
 jobs:
   build-release:
     runs-on: macos-14
@@ -39,8 +46,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Select Xcode (latest stable)
-        # xcodegen 默认输出的 pbxproj 用 format 77 (Xcode 16+),
-        # 老版 Xcode 读不了,所以锁最新稳定版。
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
@@ -49,30 +54,91 @@ jobs:
         run: brew install xcodegen
 
       - name: Ensure Config.xcconfig exists
-        # 本地 gitignored (放签名身份),CI 上不存在 → xcodegen 校验失败。
-        # 留空即可,下面 xcodebuild 命令行显式 CODE_SIGN_IDENTITY=- 覆盖。
+        # 本地 gitignored,CI 上不存在会导致 xcodegen 校验失败 —— 留空占位即可。
+        # 真实签名配置从命令行 xcodebuild 参数注入。
         run: touch Config.xcconfig
 
       - name: Generate xcodeproj
         run: xcodegen generate
 
-      - name: Build MacAsDisplay (Universal, Release)
+      - name: Import Developer ID certificate
+        # 建临时 keychain,导入 p12,set-key-partition-list 避免 codesign 弹 GUI 授权。
+        # KEYCHAIN_PASSWORD 用 run_id 随机化,一次性,jobs 结束 runner 回收。
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          KC_PATH="$RUNNER_TEMP/build.keychain-db"
+          P12_PATH="$RUNNER_TEMP/devid.p12"
+
+          echo "$P12_BASE64" | base64 --decode > "$P12_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KC_PATH"
+          security set-keychain-settings -lut 21600 "$KC_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KC_PATH"
+
+          security import "$P12_PATH" -P "$P12_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KC_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KC_PATH"
+
+          # 把临时 keychain 加到搜索列表最前,xcodebuild 才能找到证书
+          security list-keychain -d user -s "$KC_PATH" $(security list-keychains -d user | tr -d '"')
+
+          rm -f "$P12_PATH"
+          security find-identity -v -p codesigning "$KC_PATH"
+
+      - name: Build MacAsDisplay (Universal, Release, Developer ID signed)
+        # ENABLE_HARDENED_RUNTIME=YES + OTHER_CODE_SIGN_FLAGS --timestamp 是公证硬性要求。
+        # CODE_SIGN_STYLE=Manual 避免 Xcode 去跟 App Store Connect 协调 provisioning profile。
         run: |
           xcodebuild -scheme MacAsDisplay -configuration Release \
             -derivedDataPath build \
             -arch arm64 -arch x86_64 ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
+            DEVELOPMENT_TEAM=$TEAM_ID \
+            ENABLE_HARDENED_RUNTIME=YES \
+            OTHER_CODE_SIGN_FLAGS="--timestamp" \
             build
 
-      - name: Verify architectures
-        run: |
-          lipo -info build/Build/Products/Release/MacAsDisplay.app/Contents/MacOS/MacAsDisplay
-
-      - name: Package DMG
+      - name: Verify architectures and signature
         working-directory: build/Build/Products/Release
         run: |
-          # dmg-staging 目录做 DMG 根:.app + /Applications 符号链接
-          # 用户打开 DMG 直接拖 .app 到 Applications 图标即可
+          lipo -info MacAsDisplay.app/Contents/MacOS/MacAsDisplay
+          codesign -dv --verbose=4 MacAsDisplay.app 2>&1 | head -30
+          codesign --verify --deep --strict --verbose=2 MacAsDisplay.app
+
+      - name: Notarize app
+        # 把 .app 打成 zip 送公证(notarytool 接受 zip/dmg/pkg),然后 staple 回 .app。
+        # --wait 会阻塞直到 Apple 返回,通常 1-5 分钟。
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        working-directory: build/Build/Products/Release
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent MacAsDisplay.app MacAsDisplay-notarize.zip
+
+          xcrun notarytool submit MacAsDisplay-notarize.zip \
+            --apple-id "$APPLE_ID" \
+            --password "$APP_SPECIFIC_PASSWORD" \
+            --team-id "$TEAM_ID" \
+            --wait
+
+          xcrun stapler staple MacAsDisplay.app
+          spctl -a -vv -t exec MacAsDisplay.app || true
+          rm MacAsDisplay-notarize.zip
+
+      - name: Package DMG
+        # 已经 staple 过的 .app 进 DMG,用户拖到 /Applications 即可。
+        # 再 staple 一次 DMG 本身,离线场景下双击 DMG 也无警告。
+        working-directory: build/Build/Products/Release
+        run: |
+          set -euo pipefail
           mkdir -p dmg-staging
           cp -R MacAsDisplay.app dmg-staging/
           ln -s /Applications dmg-staging/Applications
@@ -81,6 +147,14 @@ jobs:
             -srcfolder dmg-staging \
             -ov -format UDZO \
             MacAsDisplay.dmg
+
+          xcrun notarytool submit MacAsDisplay.dmg \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APP_SPECIFIC_PASSWORD }}" \
+            --team-id "$TEAM_ID" \
+            --wait
+          xcrun stapler staple MacAsDisplay.dmg
+
           shasum -a 256 MacAsDisplay.dmg > SHA256SUMS.txt
           ls -lh MacAsDisplay.dmg SHA256SUMS.txt
 
@@ -97,7 +171,7 @@ jobs:
 
             下载 `MacAsDisplay.dmg` → 打开 → 拖 `MacAsDisplay.app` 到 `Applications`。
 
-            首次启动:右键 → Open(绕过 Gatekeeper;ad-hoc 签名无开发者账号)。
+            双击直接运行,无 Gatekeeper 警告(Apple 公证 + Developer ID 签名)。
 
             启动后选择角色:
             - **Main Mac**:屏幕会被采集发送(Sender)
@@ -108,7 +182,7 @@ jobs:
             完整说明: [README](https://github.com/${{ github.repository }}#readme)
 
             ---
-            Ad-hoc 签名的 Universal 二进制 (arm64 + x86_64)。
+            已公证 Universal 二进制 (arm64 + x86_64)。
             SHA256 校验见 `SHA256SUMS.txt`。
 
       # 非 tag 触发(workflow_dispatch)时,artifact 上传做烟测
