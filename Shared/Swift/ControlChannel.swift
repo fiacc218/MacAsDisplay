@@ -135,8 +135,8 @@ final class ControlChannel {
         var reuse: Int32 = 1
         setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // 需要往 255.255.255.255 / 169.254.255.255 / 子网广播地址发现发现包。
-        // Darwin 要求显式开 SO_BROADCAST,否则 sendto 返回 EACCES。
+        // 允许子网广播 sendto —— 发现机制:Receiver 在所有接口广播 Hello/Capability,
+        // Sender 从 src IP 学到对端地址。不开这个,sendto 到 x.x.x.255 直接 EACCES。
         var bcast: Int32 = 1
         setsockopt(s, SOL_SOCKET, SO_BROADCAST, &bcast, socklen_t(MemoryLayout<Int32>.size))
 
@@ -222,41 +222,23 @@ final class ControlChannel {
         rawSendto(pkt, to: &addr)
     }
 
-    /// 把同一包向本机每个活动接口的广播地址各发一次,帮对端做零配置发现。
-    /// 每次广播用一个独立 nonce(接收端按源 IP:port 维护 high-water,互不干扰)。
-    ///
-    /// **关键:每个目标临时起一个 socket 并 `IP_BOUND_IF` 绑到对应接口**。
-    /// 不这样做的话,Darwin 路由表只会让广播从默认接口出去,TB Bridge 一侧的
-    /// 169.254.255.255 包根本不会进 bridge0,对端收不到。实测过:Sender 只看见
-    /// LAN 广播到达,TB 广播静默丢失 —— 就是这个原因。
-    func broadcast(_ type: PacketType, payload: Data = Data(), port: UInt16) {
+    /// 把单次 sendto 绑到指定接口(按 `if_nametoindex` 的 ifIndex)。用于
+    /// 强制广播包从特定网卡出门 —— 否则默认路由会把所有广播都走 Wi-Fi。
+    /// 发完立刻解绑,不污染后续 unicast 的正常路由行为。
+    func sendToVia(ifIndex: UInt32, _ type: PacketType, payload: Data = Data(),
+                   host: String, port: UInt16) {
+        guard fd >= 0 else { return }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port   = port.bigEndian
+        guard inet_pton(AF_INET, host, &addr.sin_addr) == 1 else { return }
         guard let pkt = buildPacket(type: type, payload: payload) else { return }
 
-        var dst = sockaddr_in()
-        dst.sin_family = sa_family_t(AF_INET)
-        dst.sin_port   = port.bigEndian
-
-        for t in NetworkDiscovery.localBroadcastTargets() {
-            guard inet_pton(AF_INET, t.address, &dst.sin_addr) == 1 else { continue }
-            let s = socket(AF_INET, SOCK_DGRAM, 0)
-            if s < 0 { continue }
-            var yes: Int32 = 1
-            setsockopt(s, SOL_SOCKET, SO_BROADCAST, &yes, socklen_t(MemoryLayout<Int32>.size))
-            if t.ifIndex != 0 {
-                var idx = t.ifIndex
-                // IP_BOUND_IF 强制包从该接口出,不走默认路由。
-                setsockopt(s, IPPROTO_IP, IP_BOUND_IF, &idx, socklen_t(MemoryLayout<UInt32>.size))
-            }
-            _ = pkt.withUnsafeBytes { raw -> Int in
-                withUnsafePointer(to: &dst) { p -> Int in
-                    p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
-                        sendto(s, raw.baseAddress, raw.count, 0,
-                               sa, socklen_t(MemoryLayout<sockaddr_in>.size))
-                    }
-                }
-            }
-            close(s)
-        }
+        var idx = ifIndex
+        setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &idx, socklen_t(MemoryLayout<UInt32>.size))
+        rawSendto(pkt, to: &addr)
+        var zero: UInt32 = 0
+        setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &zero, socklen_t(MemoryLayout<UInt32>.size))
     }
 
     // MARK: packet build / raw sendto

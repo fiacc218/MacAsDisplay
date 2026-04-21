@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>MacAsDisplay</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!--
+        LSUIElement 不在这里 —— 这台机器是 "Main Mac(菜单栏)" 还是
+        "Secondary Display(全屏)" 是运行时根据用户在 RoleChooser 里选的
+        AppRole 决定,AppMain 里调 `NSApp.setActivationPolicy(...)` 切。
+        写死在 plist 里会把两种模式锁死成其中一种。
+    -->
+
+    <!-- 屏幕录制(Main Mac 模式下用;Secondary Display 不会触发所以不弹) -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Capture the virtual display and stream it to the paired Mac.</string>
+
+    <!-- 本地网络(Thunderbolt Bridge 也算本地网络) -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Send / receive screen data over Thunderbolt Bridge or the local network.</string>
+</dict>
+</plist>

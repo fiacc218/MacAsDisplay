@@ -1,5 +1,5 @@
-# Release CI —— push tag (v*) 触发,构建 Sender + Receiver 的 Universal .app,
-# 打 zip,发 GitHub Release。
+# Release CI —— push tag (v*) 触发,构建 MacAsDisplay Universal .app,
+# 打 DMG,发 GitHub Release。
 #
 # 为什么 macos-14 runner:
 #   - 自带 Xcode 15+,满足 project.yml 的 MACOSX_DEPLOYMENT_TARGET=14.0
@@ -7,11 +7,16 @@
 #
 # 为什么 Universal (arm64 + x86_64):
 #   - Receiver 目标机器可能是任意老 Mac(Intel 或 Apple Silicon)
-#   - 一个 .app 覆盖所有场景,install.sh 不用分架构
+#   - 一个 .app 双端复用(启动时选择角色),覆盖所有场景
+#
+# 为什么 DMG 而不是 zip:
+#   - 用户拖拽 /Applications 的直觉最低摩擦
+#   - DMG 内自带 /Applications 符号链接,不用 Finder 手动导航
+#   - 避免 zip 解压后 Gatekeeper quarantine 的 "xxx.app 已损坏" 困扰
 #
 # 签名:
 #   - 使用 ad-hoc (CODE_SIGN_IDENTITY=-),零账号依赖
-#   - 用户下载后 install.sh 会 `xattr -dr com.apple.quarantine` + 本地 ad-hoc 重签
+#   - 用户首次打开右键 Open 绕过 Gatekeeper 即可
 #
 # 触发:
 #   git tag v0.1.0 && git push origin v0.1.0
@@ -51,17 +56,9 @@ jobs:
       - name: Generate xcodeproj
         run: xcodegen generate
 
-      - name: Build Sender (Universal, Release)
+      - name: Build MacAsDisplay (Universal, Release)
         run: |
-          xcodebuild -scheme Sender -configuration Release \
-            -derivedDataPath build \
-            -arch arm64 -arch x86_64 ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
-            build
-
-      - name: Build Receiver (Universal, Release)
-        run: |
-          xcodebuild -scheme Receiver -configuration Release \
+          xcodebuild -scheme MacAsDisplay -configuration Release \
             -derivedDataPath build \
             -arch arm64 -arch x86_64 ONLY_ACTIVE_ARCH=NO \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
@@ -69,19 +66,23 @@ jobs:
 
       - name: Verify architectures
         run: |
-          echo "=== Sender ==="
-          lipo -info build/Build/Products/Release/MacAsDisplaySender.app/Contents/MacOS/MacAsDisplaySender
-          echo "=== Receiver ==="
-          lipo -info build/Build/Products/Release/MacAsDisplayReceiver.app/Contents/MacOS/MacAsDisplayReceiver
+          lipo -info build/Build/Products/Release/MacAsDisplay.app/Contents/MacOS/MacAsDisplay
 
-      - name: Package zips
+      - name: Package DMG
         working-directory: build/Build/Products/Release
         run: |
-          # ditto 保留 code signature + extended attributes,比 zip 更适合 .app
-          ditto -c -k --keepParent MacAsDisplaySender.app MacAsDisplaySender.zip
-          ditto -c -k --keepParent MacAsDisplayReceiver.app MacAsDisplayReceiver.zip
-          shasum -a 256 *.zip > SHA256SUMS.txt
-          ls -lh *.zip SHA256SUMS.txt
+          # dmg-staging 目录做 DMG 根:.app + /Applications 符号链接
+          # 用户打开 DMG 直接拖 .app 到 Applications 图标即可
+          mkdir -p dmg-staging
+          cp -R MacAsDisplay.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create \
+            -volname "MacAsDisplay" \
+            -srcfolder dmg-staging \
+            -ov -format UDZO \
+            MacAsDisplay.dmg
+          shasum -a 256 MacAsDisplay.dmg > SHA256SUMS.txt
+          ls -lh MacAsDisplay.dmg SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -89,19 +90,20 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            build/Build/Products/Release/MacAsDisplaySender.zip
-            build/Build/Products/Release/MacAsDisplayReceiver.zip
+            build/Build/Products/Release/MacAsDisplay.dmg
             build/Build/Products/Release/SHA256SUMS.txt
           body: |
             ## Install
 
-            **在 Receiver (老 Mac) 上一行安装**:
-            ```sh
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
-            ```
+            下载 `MacAsDisplay.dmg` → 打开 → 拖 `MacAsDisplay.app` 到 `Applications`。
 
-            **在 Sender (主 Mac) 上手动安装**:
-            下载 `MacAsDisplaySender.zip` → 解压 → 拖到 /Applications → 右键 Open。
+            首次启动:右键 → Open(绕过 Gatekeeper;ad-hoc 签名无开发者账号)。
+
+            启动后选择角色:
+            - **Main Mac**:屏幕会被采集发送(Sender)
+            - **Secondary Display**:作为副屏接收显示(Receiver)
+
+            想换角色:菜单栏图标 → Switch Role…,或 Receiver 全屏时按 ESC。
 
             完整说明: [README](https://github.com/${{ github.repository }}#readme)
 
@@ -116,6 +118,5 @@ jobs:
         with:
           name: macasdisplay-${{ github.sha }}
           path: |
-            build/Build/Products/Release/MacAsDisplaySender.zip
-            build/Build/Products/Release/MacAsDisplayReceiver.zip
+            build/Build/Products/Release/MacAsDisplay.dmg
             build/Build/Products/Release/SHA256SUMS.txt

@@ -1,26 +1,17 @@
 import SwiftUI
 import AppKit
 import CoreMedia
+import CoreGraphics
 
-/// 纯 AppKit 入口 —— 放弃 SwiftUI App lifecycle。
+/// Sender 角色(Main Mac)的 AppDelegate。
 ///
-/// 为什么:菜单栏 app(LSUIElement=YES)下 @main struct App + MenuBarExtra 的
-/// AppDelegate / StateObject 都是**懒加载**的,用户点开面板前 ControlChannel
-/// 根本没起来 —— 对我们这套"Receiver 启动就要先收到 Capability"的流程是灾难。
+/// 由统一入口 `AppMain` 在 role=.mainMac 时 instantiate 并装为 NSApp 的 delegate,
+/// 并把 activation policy 设成 .accessory(菜单栏 app,无 Dock icon)。
 ///
-/// 用 NSApplicationMain 走经典 AppDelegate 路径,生命周期回调保证进来。
-/// UI 用 NSStatusItem + NSHostingView(SwiftUI ContentView) 承载。
-@main
-enum SenderMain {
-    static func main() {
-        let app = NSApplication.shared
-        let delegate = SenderAppDelegate()
-        app.delegate = delegate
-        app.setActivationPolicy(.accessory)   // 无 Dock icon
-        app.run()
-    }
-}
-
+/// 走经典 AppKit lifecycle 的原因:
+///   SwiftUI App + MenuBarExtra 里的 AppDelegate / StateObject 都是**懒加载**的,
+///   用户点开面板前 ControlChannel 根本没起来 —— 对 Receiver 启动就要先收 Capability
+///   的流程是灾难。
 /// 应用生命周期 + 状态栏图标。
 @MainActor
 final class SenderAppDelegate: NSObject, NSApplicationDelegate {
@@ -58,6 +49,25 @@ final class SenderAppDelegate: NSObject, NSApplicationDelegate {
             // objectWillChange 在改前触发,下一 tick 再读最新状态。
             DispatchQueue.main.async { self?.updateIcon() }
         }
+
+        // 菜单栏 app 没 Dock icon,双击 .app 后用户完全不知道它启动了。
+        // 启动时主动弹一次 popover —— 用户能立刻看到 UI 并注意到新多出来的
+        // 状态栏图标,之后关闭的 popover 就是常规路径。
+        //
+        // 从状态栏点击二次打开不会走到这里(那个路径靠 toggleMenu),所以
+        // 不会重复弹;launchAtLogin 场景下可以用 launched flag 抑制。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.presentPopoverForFirstShow()
+        }
+    }
+
+    /// 启动时主动弹面板,让用户肉眼注意到菜单栏多了一个图标。
+    /// 之后只要 popover 再被关过一次,就认为用户已经"认出来了",不再自动弹。
+    private func presentPopoverForFirstShow() {
+        guard let button = statusItem?.button, !popover.isShown else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func toggleMenu() {
@@ -94,6 +104,19 @@ final class SenderController: ObservableObject {
     @Published var isStreaming: Bool    = false
     @Published var receiverConnected: Bool = false
     @Published var receiverCaps: ControlChannel.Capability? = nil
+    /// 屏幕录制权限实时状态。`CGPreflightScreenCaptureAccess()` 每 2s 轮询一次 ——
+    /// 非弹窗检测,用户在系统设置里 on/off 都能被察觉,UI 立刻更新 banner 提示。
+    /// 不去掉 "点 Start 时再 requestAccess" 那条路径:`CGPreflight` 返回 false 的
+    /// 两种原因("从未授权" vs "被拒绝")在 API 层面不可区分,只有走 request 才
+    /// 会在"从未授权"的 fresh 状态下弹系统权限对话框。
+    @Published var hasScreenRecordingPermission: Bool = false
+
+    /// 广播发现到的候选 Receiver IP 列表(去重,按最近见到时间保留 30s)。
+    /// ContentView 挂下拉菜单让用户在多候选场景(多网卡 / 多机)里选。
+    @Published var discoveredPeers: [String] = []
+    private var peerSeenAt: [String: Date] = [:]
+
+    private var permissionTimer: Timer?
 
     private static let targetHostKey = "VS.targetHost"
     private static func loadTargetHost() -> String {
@@ -143,8 +166,43 @@ final class SenderController: ObservableObject {
 
     init() {
         NSLog("[VS] SenderController.init")
+        refreshScreenRecordingPermission()
+        kickScreenRecordingRegistration()
+        // 每 2s 重查一次 —— 用户可能:
+        //   1. 关了系统设置里的授权 → banner 立刻再出来
+        //   2. 授权后回到 app → banner 自动消失,不用重启 app
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshScreenRecordingPermission() }
+        }
         wireControlChannel()
         bootstrap()
+    }
+
+    /// 读当前屏幕录制授权,推到 @Published。非弹窗,纯状态检查。
+    private func refreshScreenRecordingPermission() {
+        let ok = CGPreflightScreenCaptureAccess()
+        if ok != hasScreenRecordingPermission {
+            hasScreenRecordingPermission = ok
+            Log.app.info("screen recording permission → \(ok ? "granted" : "missing", privacy: .public)")
+        }
+    }
+
+    /// 启动时主动"试一下"屏幕录制权限。关键作用是**把本 app 注册进 TCC
+    /// 列表**:macOS 规定 app 只有至少调过一次 Screen Capture API,才会出现
+    /// 在 "系统设置 → 隐私与安全 → 录屏与系统录音" 的应用列表里。不调,列表
+    /// 就没有我们的条目,用户想开开关都找不到 app。
+    ///
+    /// 不同状态下 `CGRequestScreenCaptureAccess()` 的行为:
+    ///   - notDetermined:弹系统 "Allow / Don't Allow" 对话框(理想的首启 UX)
+    ///   - denied:**不弹**,但会 register 条目到系统设置列表(为后续引导铺路)
+    ///   - granted:no-op,直接 return true
+    /// 三种都符合我们的需要,先调就对了。
+    ///
+    /// 已经授权就跳过,避免每次启动打一条无意义日志。
+    private func kickScreenRecordingRegistration() {
+        if CGPreflightScreenCaptureAccess() { return }
+        Log.app.info("registering with TCC (Screen Recording) — system dialog may appear")
+        _ = CGRequestScreenCaptureAccess()
     }
 
     private func bootstrap() {
@@ -342,6 +400,7 @@ final class SenderController: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.lastReceiverHello = Date()
+                self.notePeerDiscovered(from: src)
                 self.learnTarget(from: src)
                 if !self.receiverConnected {
                     self.receiverConnected = true
@@ -355,6 +414,7 @@ final class SenderController: ObservableObject {
                 self.receiverCaps = caps
                 self.receiverConnected = true
                 self.lastReceiverHello = Date()
+                self.notePeerDiscovered(from: src)
                 self.learnTarget(from: src)
                 Log.net.info("receiver caps \(caps.widthPx)x\(caps.heightPx) scaleX1000=\(caps.scaleX1000) fps=\(caps.fps)")
             }
@@ -365,6 +425,17 @@ final class SenderController: ObservableObject {
                 self?.encoder?.requestKeyframe()
             }
         }
+    }
+
+    /// 收到 Receiver 广播/单播后记录源 IP,供 ContentView 下拉菜单展示。
+    /// 30s 窗口:长时间没再见到的 IP(对端换网段 / 关机)自动清掉,不污染选项。
+    private func notePeerDiscovered(from src: sockaddr_in) {
+        guard let ip = ControlChannel.ipString(from: src), !ip.isEmpty else { return }
+        peerSeenAt[ip] = Date()
+        let cutoff = Date().addingTimeInterval(-30)
+        peerSeenAt = peerSeenAt.filter { $0.value > cutoff }
+        let sorted = peerSeenAt.keys.sorted()
+        if sorted != discoveredPeers { discoveredPeers = sorted }
     }
 
     /// 从 Receiver 包的源地址学习 targetHost,并持久化。

@@ -3,19 +3,20 @@ import AppKit
 import CoreMedia
 import CoreImage
 
-@main
-struct ReceiverApp: App {
-    @NSApplicationDelegateAdaptor(ReceiverAppDelegate.self) private var delegate
-
-    var body: some Scene {
-        Settings { EmptyView() }
-    }
-}
-
+/// Receiver 角色(Secondary Display)的 AppDelegate。
+///
+/// 由统一入口 `AppMain` 在 role=.secondaryDisplay 时 instantiate 并装为 NSApp 的
+/// delegate,activation policy 设成 .regular(常规 app,全屏窗口接管屏幕)。
 final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
 
     private var window:   FullScreenWindow?
     private var renderer: MetalRenderer?
+    private var overlay:  InfoOverlayView?
+    private var signalBadge: SignalLostBadge?
+    private var overlayDismissed = false
+    private var signalTimer: Timer?
+    /// 心跳静默多久算 "Sender 掉线"。Hello 1Hz 发送,3s = 容忍 2 个丢包。
+    private let signalLostThreshold: TimeInterval = 3.0
     private let decoder = VideoDecoder()
 
     // C 接收管线,opaque 指针。
@@ -48,18 +49,44 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
         let r = MetalRenderer()
         renderer = r
         w.installContentView(r.view)
+
+        // 首屏提示 overlay —— 等第一帧解出来再淡出,让用户开屏就能抄 IP。
+        let ov = InfoOverlayView()
+        ov.setPorts(video: AppConfig.videoPort, control: AppConfig.controlPort)
+        w.addOverlay(ov)
+        overlay = ov
+
+        // 顶部 "No signal" 徽章 —— 首帧到达后才开始根据 Hello 心跳判定显隐。
+        let badge = SignalLostBadge()
+        w.addBadge(badge)
+        signalBadge = badge
+
+        // ESC 退全屏后底部浮出的控制条 —— 不再需要用户记 ⇧⌘R。
+        let bar = ReceiverControlBar()
+        bar.onReturnFullscreen = { [weak w] in w?.toggleFullScreen(nil) }
+        bar.onSwitchRole = { AppRole.resetAndRelaunch() }
+        bar.onQuit = { NSApp.terminate(nil) }
+        w.addControlBar(bar)
+
         w.makeKeyAndOrderFront(nil)
-        w.center()
         window = w
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        // 真 fullscreen —— 之前只是 borderless 铺满屏幕大小,菜单栏还在、
+        // 别的 app 窗口能浮上来,副屏体验是半成品。下一 runloop 切进系统
+        // 全屏,macOS 会给它一个独立 Space,独占整屏,用户 ESC 回桌面。
+        DispatchQueue.main.async { w.toggleFullScreen(nil) }
 
         decoder.onDecoded = { [weak self] pb, _ in
             guard let self else { return }
             self.stats.incRender()
             self.renderer?.render(pb)
             if self.dumpEnabled { self.maybeDumpFrame(pb) }
+            if !self.overlayDismissed {
+                self.overlayDismissed = true
+                Task { @MainActor [weak self] in self?.overlay?.dismiss() }
+            }
         }
         // 解码器报错 = P-frame 链真的断了,这是唯一可靠的"丢包"信号。
         //
@@ -84,7 +111,9 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
     private func startControlChannel() {
         let (key, src) = ControlAuth.loadOrCreate()
         control.setKey(key)
-        Log.net.info("PSK fp=\(ControlAuth.fingerprint(key), privacy: .public) source=\(src.description, privacy: .public)")
+        let fp = ControlAuth.fingerprint(key)
+        overlay?.setPSKFingerprint(fp)
+        Log.net.info("PSK fp=\(fp, privacy: .public) source=\(src.description, privacy: .public)")
 
         if !control.start(listenPort: AppConfig.controlPort) {
             Log.net.error("control channel bind failed")
@@ -105,10 +134,33 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in self?.sendCapability() }
         }
 
-        // 心跳
+        // 心跳 + 广播发现。
+        //   - control.send(.hello): 已有 peer(收过 Sender 包)时发到 peer
+        //   - sendToVia(ifIndex, bcast): 每秒对每条网卡定向广播一份 Hello。用
+        //     IP_BOUND_IF 逐接口出,不走默认路由 —— 否则 Sender 只会看到
+        //     Wi-Fi 那个源 IP,TB Bridge 上的 169.254/16 永远发现不了。
         helloTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.control.send(.hello) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.control.send(.hello)
+                for t in InterfaceIPs.broadcastAddresses() {
+                    self.control.sendToVia(ifIndex: t.ifIndex, .hello,
+                                           host: t.address, port: AppConfig.controlPort)
+                }
+            }
         }
+
+        // Hello 静默监视 —— 仅在首帧过后生效(之前 overlay 自己已经在说 "Waiting")。
+        // 0.5s 轮询足够细腻,无感。
+        signalTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.updateSignalBadge() }
+        }
+    }
+
+    private func updateSignalBadge() {
+        guard overlayDismissed, let badge = signalBadge else { return }
+        let lost = Date().timeIntervalSince(peerHelloAt) > signalLostThreshold
+        badge.setVisible(lost)
     }
 
     private func sendCapability() {
@@ -126,15 +178,13 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
         )
         let payload = cap.encode()
 
-        // 零配置发现:Sender 不再需要 `defaults write VS.targetHost`。
-        // Receiver 每 2s 往本机所有活动接口的广播地址打一发 Capability;
-        // Sender 一收到就从 recvfrom 源地址学到对端 IP,后续全部 unicast。
-        // 广播包只有 ~72B,链路开销可忽略。
-        control.broadcast(.capability, payload: payload, port: AppConfig.controlPort)
-
-        // 如果对端已通过单播联系过我们(peer 已填),再 unicast 一份,
-        // 保证即使广播被防火墙挡掉也能持续同步分辨率。
+        // unicast 到已知 peer + 对每条接口定向广播。用 IP_BOUND_IF 保证每张
+        // 网卡都真的出一次包,Sender 才能看见所有候选 IP(TB Bridge + Wi-Fi)。
         control.send(.capability, payload: payload)
+        for t in InterfaceIPs.broadcastAddresses() {
+            control.sendToVia(ifIndex: t.ifIndex, .capability, payload: payload,
+                              host: t.address, port: AppConfig.controlPort)
+        }
     }
 
     private func maybeDumpFrame(_ pb: CVPixelBuffer) {
@@ -221,6 +271,7 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
         statTimer?.invalidate(); statTimer = nil
         helloTimer?.invalidate(); helloTimer = nil
         capabilityTimer?.invalidate(); capabilityTimer = nil
+        signalTimer?.invalidate(); signalTimer = nil
         control.stop()
         if let p = recvPtr {
             vs_recv_pipeline_stop(p)

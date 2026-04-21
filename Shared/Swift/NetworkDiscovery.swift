@@ -1,74 +1,9 @@
 import Foundation
 import Darwin
 
-/// 本机活动接口的 IPv4 广播地址枚举。
-///
-/// 用于 Receiver 在未知 Sender IP 时广播 Capability —— Sender 收包即学到对端,
-/// 无需手工填 `VS.targetHost`。
+/// 本机网络工具:目前只用来查发到给定 host 的路由出站接口 MTU,
+/// Sender 据此挑选合适的 UDP payload 分片大小。
 enum NetworkDiscovery {
-
-    /// (ifindex, 广播地址) —— broadcast 时用 IP_BOUND_IF 绑到该接口发送,
-    /// 否则 Darwin 路由表只会把包丢给默认接口,TB Bridge 的广播根本出不去。
-    struct BroadcastTarget {
-        let ifIndex: UInt32   // 0 表示未知,忽略 bind
-        let ifName:  String
-        let address: String
-    }
-
-    /// 扫描 `getifaddrs`,返回所有 up / 非 loopback / 支持 broadcast 的 IPv4
-    /// 接口对应的 **子网广播地址**,带接口 index 以便精确绑定出口。
-    ///
-    /// macOS 的 `<ifaddrs.h>` 用 `#define ifa_broadaddr ifa_dstaddr` —— 这个宏
-    /// 不会随 Swift 模块 import 过来,所以直接读 `ifa_dstaddr`(在 IFF_BROADCAST
-    /// 的接口上它就是广播地址)。
-    static func localBroadcastTargets() -> [BroadcastTarget] {
-        var out: [BroadcastTarget] = []
-        var seen: Set<String> = []
-
-        var ifapPtr: UnsafeMutablePointer<ifaddrs>? = nil
-        guard getifaddrs(&ifapPtr) == 0, let first = ifapPtr else { return [] }
-        defer { freeifaddrs(ifapPtr) }
-
-        var cur: UnsafeMutablePointer<ifaddrs>? = first
-        while let ptr = cur {
-            let entry = ptr.pointee
-            cur = entry.ifa_next
-
-            let flags = Int32(entry.ifa_flags)
-            if (flags & IFF_UP)        == 0 { continue }
-            if (flags & IFF_LOOPBACK)  != 0 { continue }
-            if (flags & IFF_BROADCAST) == 0 { continue }
-
-            guard let saPtr = entry.ifa_dstaddr else { continue }
-            if saPtr.pointee.sa_family != sa_family_t(AF_INET) { continue }
-
-            let ifName = String(cString: entry.ifa_name)
-            let ifIdx  = if_nametoindex(ifName)   // 0 on failure
-
-            let bcast: String? = saPtr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sin -> String? in
-                var a = sin.pointee.sin_addr
-                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                guard inet_ntop(AF_INET, &a, &buf, socklen_t(INET_ADDRSTRLEN)) != nil else { return nil }
-                let s = String(cString: buf)
-                return (s.isEmpty || s == "0.0.0.0") ? nil : s
-            }
-            guard let addr = bcast else { continue }
-
-            let key = "\(ifIdx):\(addr)"
-            if seen.insert(key).inserted {
-                out.append(BroadcastTarget(ifIndex: ifIdx, ifName: ifName, address: addr))
-            }
-        }
-        return out
-    }
-
-    /// 旧签名 —— 只要地址字符串。保持兼容,但新代码应优先用
-    /// `localBroadcastTargets()` 以便做接口绑定。
-    static func localBroadcastAddresses() -> [String] {
-        var s: Set<String> = ["169.254.255.255"]
-        for t in localBroadcastTargets() { s.insert(t.address) }
-        return Array(s)
-    }
 
     /// 返回去 `host` 这条路由**出站接口**的 IPv4 MTU(bytes)。探测失败 → nil。
     ///
