@@ -39,6 +39,11 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
+      - name: Ensure Config.xcconfig exists
+        # 本地 gitignored (放签名身份),CI 上不存在 → xcodegen 校验失败。
+        # 留空即可,下面 xcodebuild 命令行显式 CODE_SIGN_IDENTITY=- 覆盖。
+        run: touch Config.xcconfig
+
       - name: Generate xcodeproj
         run: xcodegen generate
 

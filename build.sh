@@ -29,6 +29,9 @@ ensure_xcodegen() {
 
 ensure_project() {
     ensure_xcodegen
+    # Config.xcconfig gitignored(放本地签名身份)。project.yml 硬引用它,不存在时
+    # xcodegen 会校验失败。留个空文件 → fall through 到 xcodebuild 命令行/默认 ad-hoc。
+    [[ -f Config.xcconfig ]] || touch Config.xcconfig
     if [[ ! -d MacAsDisplay.xcodeproj ]] || [[ project.yml -nt MacAsDisplay.xcodeproj ]]; then
         log "xcodegen generate"
         xcodegen generate --quiet
