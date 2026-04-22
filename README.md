@@ -20,9 +20,8 @@ Bridge or Wi-Fi. HEVC hardware-encoded, 30 fps at native retina resolution,
 One `.app`, two roles. Install the same DMG on both Macs, pick a role on
 first launch.
 
-**Works over Wi-Fi** — no cable required. Put the second Mac wherever you
-want; the app auto-discovers it on the local network. Prefer a cable for
-guaranteed throughput? Thunderbolt Bridge works too.
+Works over Wi-Fi (auto-discovery on the local network) or Thunderbolt
+Bridge (higher throughput, sub-ms RTT).
 
 ## Why not just use…
 
