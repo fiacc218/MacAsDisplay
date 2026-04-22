@@ -77,6 +77,8 @@ targets:
           - "Info.plist"
           - "MacAsDisplay.entitlements"
           - "MacAsDisplay-Bridging-Header.h"
+          - "Assets.xcassets"
+      - path: App/Assets.xcassets
       - path: Sender
         excludes:
           - "Info.plist"
@@ -96,6 +98,7 @@ targets:
       base:
         PRODUCT_NAME: "MacAsDisplay"
         PRODUCT_BUNDLE_IDENTIFIER: "xyz.dashuo.macasdisplay"
+        ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
         INFOPLIST_FILE: "App/Info.plist"
         CODE_SIGN_ENTITLEMENTS: "App/MacAsDisplay.entitlements"
         SWIFT_OBJC_BRIDGING_HEADER: "App/MacAsDisplay-Bridging-Header.h"
