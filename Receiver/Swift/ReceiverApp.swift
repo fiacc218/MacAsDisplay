@@ -19,6 +19,9 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
     private let signalLostThreshold: TimeInterval = 3.0
     private let decoder = VideoDecoder()
 
+    // 阻止系统屏保 / 关显示器打断画面,进程退出自动释放。
+    private let sleepInhibitor = SleepInhibitor()
+
     // C 接收管线,opaque 指针。
     private var recvPtr: OpaquePointer? = nil
 
@@ -43,6 +46,9 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
         if let raw = vs.cpp_hello() {
             Log.app.info("[C++ Interop] \(String(cString: raw), privacy: .public)")
         }
+
+        // Receiver 活着的时候别让屏保 / 关显示器打断画面。
+        sleepInhibitor.acquire(reason: "MacAsDisplay Receiver is showing a remote Mac")
 
         // 窗口 + renderer
         let w = FullScreenWindow()
@@ -268,6 +274,7 @@ final class ReceiverAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        sleepInhibitor.release()
         statTimer?.invalidate(); statTimer = nil
         helloTimer?.invalidate(); helloTimer = nil
         capabilityTimer?.invalidate(); capabilityTimer = nil

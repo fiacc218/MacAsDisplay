@@ -26,7 +26,7 @@ Thunderbolt Bridge。
 - **Universal 二进制**(arm64 + x86_64)· 两端都支持 Apple Silicon 和
   支持 HEVC 的 Intel Mac
 - **多语言** · 简体中文 / English,跟随系统语言
-- **免费、开源** · Apache 2.0
+- **免费、开源** · MIT
 
 ## 要求
 
@@ -93,11 +93,6 @@ tccutil reset ScreenCapture xyz.dashuo.macasdisplay
 ```
 大版本首装会遇到一次,之后升级都会保留授权。
 
-**副屏屏保跳出来打断画面。**
-```sh
-caffeinate -d -i -s -w $(pgrep MacAsDisplay)
-```
-
 **刘海屏 MBP 看不到菜单栏图标。** 用
 [Bartender](https://www.macbartender.com/) /
 [Hidden Bar](https://github.com/dwarvesf/hidden),或 `VS_AUTOSTART=1`
@@ -128,6 +123,6 @@ brew install xcodegen
 
 ## 许可
 
-Apache License 2.0。见 [LICENSE](LICENSE)。
+MIT。见 [LICENSE](LICENSE)。
 
 本项目与 Apple Inc. 无关。

@@ -28,7 +28,7 @@ for the newer one over Wi-Fi or Thunderbolt Bridge.
 - **Universal binary** (arm64 + x86_64) · Apple Silicon and Intel (HEVC
   capable) supported on both sides
 - **Localized** · English / 简体中文, follows system language
-- **Free, open source** · Apache 2.0
+- **Free, open source** · MIT
 
 ## Requirements
 
@@ -98,11 +98,6 @@ tccutil reset ScreenCapture xyz.dashuo.macasdisplay
 ```
 One-time after major-version installs; subsequent updates keep the grant.
 
-**Screensaver on the Secondary interrupts playback.**
-```sh
-caffeinate -d -i -s -w $(pgrep MacAsDisplay)
-```
-
 **Menu-bar icon hidden behind the notch.** Use
 [Bartender](https://www.macbartender.com/) /
 [Hidden Bar](https://github.com/dwarvesf/hidden), or set
@@ -134,6 +129,6 @@ protocol or authentication.
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
 MacAsDisplay is not affiliated with or endorsed by Apple Inc.
