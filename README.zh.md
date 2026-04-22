@@ -17,6 +17,9 @@ HEVC 硬编码,30 fps 原生 retina 分辨率,好链路下 ~1 帧延迟。
 
 一个 `.app` 双角色。两台 Mac 装同一份 DMG,首启选角色。
 
+**Wi-Fi 直接用** —— 不用插线。副屏 Mac 摆到房间任意位置都行,主 Mac
+自动发现它。想要更稳的带宽?雷雳线也支持。
+
 ## 为什么不用现成的
 
 | 方案 | 不合适的原因 |
@@ -32,7 +35,7 @@ HEVC 硬编码,30 fps 原生 retina 分辨率,好链路下 ~1 帧延迟。
 |---|---|
 | **主 Mac** | macOS 14+,Apple Silicon 或有 HEVC 硬编的 Intel |
 | **副屏 Mac** | macOS 14+,任何有 HEVC 硬解的 Mac(Intel 第 7 代+ / Apple Silicon) |
-| **链路** | **Thunderbolt Bridge** 直连(推荐)或同一个 Wi-Fi |
+| **链路** | 同一个 Wi-Fi(最方便)或 Thunderbolt Bridge 直连 |
 
 ## 安装
 
@@ -58,18 +61,22 @@ HEVC 硬编码,30 fps 原生 retina 分辨率,好链路下 ~1 帧延迟。
 - 同一 LAN / TB Bridge 上的 Receiver 会**自动发现**,点 `Target` 右边下拉
   直接选。
 
-## Thunderbolt Bridge(推荐)
+## 网络
 
-点对点,10+ Gbps,亚毫秒 RTT,不跟 Wi-Fi 抢带宽。
+两台 Mac 在同一个 Wi-Fi 上就能用 —— 启动副屏,主 Mac 自动发现,IP 出
+现在 `Target` 下拉菜单里。HEVC 30fps retina 大概 ~20-50 Mbps,Wi-Fi 5+
+在正常网络下都够。
+
+### Thunderbolt Bridge(可选,追求最大带宽时)
+
+点对点,10+ Gbps,亚毫秒 RTT,不跟 Wi-Fi 抢。
 
 1. 两台 Mac 用 TB3/TB4 线连起来。
 2. **系统设置 → 网络 → Thunderbolt Bridge → 详细信息 → TCP/IP →
    配置 IPv4:使用 DHCP 并填手动地址** —— 给两台分配
    `169.254.0.1` / `169.254.0.2`(或同一 /16 的任一对)。
-3. 验证:对方执行 `ping -c 3 169.254.0.2`。
-
-**Jumbo frames(可选):** 两边都跑 `sudo ifconfig bridge0 mtu 9000`,
-大 I-frame 就不会被拆成一百多个 1500 字节小包。
+3. `sudo ifconfig bridge0 mtu 9000` 两端都跑一下启用 jumbo frames
+   (大 I-frame 不会被拆成一堆小包)。
 
 ## 使用
 

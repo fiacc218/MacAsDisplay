@@ -20,6 +20,10 @@ Bridge or Wi-Fi. HEVC hardware-encoded, 30 fps at native retina resolution,
 One `.app`, two roles. Install the same DMG on both Macs, pick a role on
 first launch.
 
+**Works over Wi-Fi** — no cable required. Put the second Mac wherever you
+want; the app auto-discovers it on the local network. Prefer a cable for
+guaranteed throughput? Thunderbolt Bridge works too.
+
 ## Why not just use…
 
 | Tool | Why it doesn't fit |
@@ -35,7 +39,7 @@ first launch.
 |---|---|
 | **Main Mac** | macOS 14+, Apple Silicon or Intel with HEVC hardware encoder |
 | **Secondary Mac** | macOS 14+, any Mac with HEVC hardware decoder (Intel 7th-gen+ / Apple Silicon) |
-| **Link** | **Thunderbolt Bridge** direct-cable (recommended) or shared Wi-Fi |
+| **Link** | Shared Wi-Fi (easiest), or Thunderbolt Bridge cable |
 
 ## Install
 
@@ -61,18 +65,23 @@ Receiver by pressing **ESC** to exit full-screen and using the control bar.
 - Receivers on the same LAN / TB bridge are **auto-discovered** — click the
   dropdown next to `Target` and pick one.
 
-## Thunderbolt Bridge (recommended)
+## Network
 
-Point-to-point, 10+ Gbps, sub-ms RTT, zero Wi-Fi contention.
+Both Macs on the same Wi-Fi works out of the box — just launch the
+Receiver, the Sender auto-discovers it, IPs appear in the `Target`
+dropdown. HEVC at 30 fps retina is ~20–50 Mbps, well within Wi-Fi 5+
+on a reasonable network.
+
+### Thunderbolt Bridge (optional, for max throughput)
+
+Point-to-point cable, 10+ Gbps, sub-ms RTT, no Wi-Fi contention.
 
 1. Connect both Macs with a TB3/TB4 cable.
 2. **System Settings → Network → Thunderbolt Bridge → Details → TCP/IP →
    Configure IPv4: Using DHCP with manual address** — assign
    `169.254.0.1` / `169.254.0.2` (or any pair on the same /16).
-3. Verify: `ping -c 3 169.254.0.2` from the other side.
-
-**Jumbo frames (optional):** `sudo ifconfig bridge0 mtu 9000` on both sides
-avoids IP fragmentation on large I-frames.
+3. `sudo ifconfig bridge0 mtu 9000` on both sides enables jumbo frames
+   (avoids IP fragmentation on large I-frames).
 
 ## Using it
 
