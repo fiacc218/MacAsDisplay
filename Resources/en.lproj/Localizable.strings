@@ -1,0 +1,43 @@
+/* MacAsDisplay — user-facing UI strings.
+   Keys are the English source strings. The Chinese file (zh-Hans)
+   maps the same keys to their 简体中文 translations. SwiftUI Text()
+   and NSLocalizedString() both read from here automatically based
+   on the user's system language. */
+
+// MARK: - Role chooser (first launch)
+"MacAsDisplay — Choose role" = "MacAsDisplay — Choose role";
+"Welcome to MacAsDisplay" = "Welcome to MacAsDisplay";
+"What is this Mac's role?" = "What is this Mac's role?";
+"Main Mac" = "Main Mac";
+"Use another Mac as a second display for this one." = "Use another Mac as a second display for this one.";
+"Secondary Display" = "Secondary Display";
+"Show another Mac's screen on this one." = "Show another Mac's screen on this one.";
+"You can switch roles later from the app menu." = "You can switch roles later from the app menu.";
+
+// MARK: - Sender menubar popover
+"Receiver online" = "Receiver online";
+"Receiver offline" = "Receiver offline";
+"Screen Recording permission required" = "Screen Recording permission required";
+"Click below to request access. Approve in the dialog, or enable MacAsDisplay manually under System Settings → Privacy & Security → Screen Recording." = "Click below to request access. Approve in the dialog, or enable MacAsDisplay manually under System Settings → Privacy & Security → Screen Recording.";
+"Open Screen Recording settings" = "Open Screen Recording settings";
+"Status" = "Status";
+"Display" = "Display";
+"Target" = "Target";
+"host" = "host";
+"Pick from receivers discovered via broadcast" = "Pick from receivers discovered via broadcast";
+"Start" = "Start";
+"Stop" = "Stop";
+"Switch Role…" = "Switch Role…";
+"Re-choose whether this Mac is the Main or Secondary display" = "Re-choose whether this Mac is the Main or Secondary display";
+"Quit" = "Quit";
+
+// MARK: - Receiver fullscreen control bar
+"Return to Fullscreen" = "Return to Fullscreen";
+
+// MARK: - Receiver info overlay
+"MacAsDisplay Receiver" = "MacAsDisplay Receiver";
+"Waiting for Sender…" = "Waiting for Sender…";
+"Enter one of these addresses into the Sender:" = "Enter one of these addresses into the Sender:";
+"Enter any IP address above into the Sender to connect · Press ESC for options (switch role / quit)" = "Enter any IP address above into the Sender to connect · Press ESC for options (switch role / quit)";
+"No active network interfaces — check Wi-Fi / Thunderbolt" = "No active network interfaces — check Wi-Fi / Thunderbolt";
+"No signal" = "No signal";

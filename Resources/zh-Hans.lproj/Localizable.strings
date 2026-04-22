@@ -1,0 +1,40 @@
+/* MacAsDisplay — 简体中文本地化。
+   左边是英文原文(key),右边是中文翻译。 */
+
+// MARK: - 角色选择(首次启动)
+"MacAsDisplay — Choose role" = "MacAsDisplay — 选择角色";
+"Welcome to MacAsDisplay" = "欢迎使用 MacAsDisplay";
+"What is this Mac's role?" = "这台 Mac 扮演什么角色?";
+"Main Mac" = "主 Mac";
+"Use another Mac as a second display for this one." = "用另一台 Mac 作为这台的副屏。";
+"Secondary Display" = "副屏";
+"Show another Mac's screen on this one." = "把另一台 Mac 的屏幕显示在这台上。";
+"You can switch roles later from the app menu." = "之后可以从应用菜单切换角色。";
+
+// MARK: - Sender 菜单栏面板
+"Receiver online" = "副屏在线";
+"Receiver offline" = "副屏离线";
+"Screen Recording permission required" = "需要授权录屏";
+"Click below to request access. Approve in the dialog, or enable MacAsDisplay manually under System Settings → Privacy & Security → Screen Recording." = "点下方按钮申请授权。在系统弹框中点允许,或手动进入 系统设置 → 隐私与安全性 → 录屏与系统录音 开启 MacAsDisplay。";
+"Open Screen Recording settings" = "打开录屏设置";
+"Status" = "状态";
+"Display" = "分辨率";
+"Target" = "目标";
+"host" = "主机";
+"Pick from receivers discovered via broadcast" = "从广播发现的副屏里选";
+"Start" = "开始";
+"Stop" = "停止";
+"Switch Role…" = "切换角色…";
+"Re-choose whether this Mac is the Main or Secondary display" = "重新选择这台 Mac 是主机还是副屏";
+"Quit" = "退出";
+
+// MARK: - 副屏全屏控制条
+"Return to Fullscreen" = "返回全屏";
+
+// MARK: - 副屏首屏信息
+"MacAsDisplay Receiver" = "MacAsDisplay 副屏";
+"Waiting for Sender…" = "等待主 Mac 连接…";
+"Enter one of these addresses into the Sender:" = "把以下任一 IP 填入主 Mac:";
+"Enter any IP address above into the Sender to connect · Press ESC for options (switch role / quit)" = "把上面任一 IP 填入主 Mac 即可连接 · 按 ESC 显示选项(切换角色 / 退出)";
+"No active network interfaces — check Wi-Fi / Thunderbolt" = "没有活动的网络接口 —— 检查 Wi-Fi / Thunderbolt";
+"No signal" = "无信号";

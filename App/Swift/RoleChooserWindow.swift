@@ -17,7 +17,7 @@ final class RoleChooserAppDelegate: NSObject, NSApplicationDelegate {
         }
         let host = NSHostingController(rootView: view)
         let w = NSWindow(contentViewController: host)
-        w.title = "MacAsDisplay — Choose role"
+        w.title = String(localized: "MacAsDisplay — Choose role")
         w.styleMask = [.titled, .closable]   // 允许关,关 = 退
         w.setContentSize(NSSize(width: 640, height: 380))
         w.center()
@@ -69,11 +69,13 @@ private struct RoleChooserView: View {
     }
 }
 
-/// 卡片式大按钮。
+/// 卡片式大按钮。title/subtitle 用 LocalizedStringKey 而不是 String —— SwiftUI 的
+/// Text(String) 不走 .strings 查表,Text(LocalizedStringKey) 才走。让调用侧写成
+/// 字面量(如 "Main Mac"),编译器会自动转成 LocalizedStringKey,然后 Text 会查表。
 private struct RoleCard: View {
     let icon: String
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let action: () -> Void
 
     @State private var hovering = false

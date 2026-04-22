@@ -88,6 +88,10 @@ targets:
           - "Receiver.entitlements"
           - "Receiver-Bridging-Header.h"
       - path: Shared
+      # lproj 目录被 xcodegen 识别为 variant group,打进 .app 的 Contents/Resources/<lang>.lproj/
+      # 下,macOS 按系统语言自动选。添新语言只要建 Resources/<lang>.lproj/Localizable.strings。
+      - path: Resources/en.lproj/Localizable.strings
+      - path: Resources/zh-Hans.lproj/Localizable.strings
     settings:
       base:
         PRODUCT_NAME: "MacAsDisplay"

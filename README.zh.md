@@ -2,315 +2,142 @@
 
 [English](README.md) | **中文**
 
-把闲置的旧 Mac 变成新 Mac 的副屏 —— 通过 Thunderbolt Bridge 或 Wi-Fi。
-HEVC 硬件编码，30 fps 原生 retina 分辨率，好链路下延迟约 1 帧。
+把一台旧 Mac 当成新 Mac 的第二显示器,走 Thunderbolt Bridge 或 Wi-Fi。
+HEVC 硬编码,30 fps 原生 retina 分辨率,好链路下 ~1 帧延迟。
 
-> 状态: **alpha / 作者日常使用**。使用了 macOS 私有 API
-> (`CGVirtualDisplay`),无法上架 App Store,未来 macOS 版本可能失效。
-> 详见 [限制](#限制)。
-
----
-
-## 这是什么
+> 状态:**alpha / 作者自用日常**。用了私有 API(`CGVirtualDisplay`),
+> 不能上 App Store,后续 macOS 版本可能变。见[限制](#限制)。
 
 ```
-┌──────────────┐  HEVC/UDP + HMAC 控制   ┌──────────────┐
-│   Sender     │──────────────────────▶  │   Receiver   │
-│ (主 Mac)     │   Thunderbolt / Wi-Fi   │  (旧 Mac)    │
-│              │                         │              │
-│ 虚拟显示器   │                         │ 硬解码器     │
-│ ScreenCapture│                         │ Metal 渲染   │
-│ VT 编码器    │                         │ 全屏显示     │
+┌──────────────┐  HEVC/UDP + HMAC ctrl   ┌──────────────┐
+│   主 Mac     │──────────────────────▶  │   副屏 Mac   │
+│  (Sender)    │  Thunderbolt / Wi-Fi    │  (Receiver)  │
 └──────────────┘                         └──────────────┘
 ```
 
-- **Sender**(发送端): 创建一个 headless 虚拟显示器,用 ScreenCaptureKit
-  捕获,经 VideoToolbox 硬件编码为 HEVC,通过 UDP 发送。
-- **Receiver**(接收端): 接收 / 重组,硬件解码,Metal 全屏渲染。
-- **仅显示,不转发输入。** macOS 的多显示器原生光标路由处理剩下的一切。
+一个 `.app` 双角色。两台 Mac 装同一份 DMG,首启选角色。
 
-## 为什么不用 …
+## 为什么不用现成的
 
-| 工具 | 为什么不合适 |
+| 方案 | 不合适的原因 |
 |---|---|
 | **Sidecar** | 只支持 iPad。 |
-| **Universal Control** | Mac 间共享光标 / 键盘,不是副屏。 |
-| **AirPlay to Mac** | 1080p 封顶,延迟高,Apple 独占。 |
-| **Luna / Duet** | 商业,闭源,订阅。 |
-| **DDC over USB-C** | 副屏面板需支持 DP-in(老 MBP 不支持)。 |
+| **随航** / Universal Control | 只共享鼠标键盘,不是副屏。 |
+| **AirPlay to Mac** | 1080p 上限,延迟高。 |
+| **Luna / Duet** | 商业订阅。 |
 
-做 MacAsDisplay 是因为你有一台性能完好的旧 Mac 放在抽屉里,想免费把它
-当成 ~3K 30fps 的副屏,用你手头已有的线。
+## 要求
 
-## 环境要求
-
-| 角色 | 要求 |
+| | |
 |---|---|
-| 两端 | macOS 14+ (Sonoma)、Xcode 15+、[XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`) |
-| Sender | Apple Silicon,或带 HEVC 硬编的较新 Intel |
-| Receiver | 任何带 HEVC 硬解的 Mac(Intel 第 7 代以上 / 所有 Apple Silicon) |
-| 链路 | **Thunderbolt Bridge** 直连(推荐),或共享 Wi-Fi |
+| **主 Mac** | macOS 14+,Apple Silicon 或有 HEVC 硬编的 Intel |
+| **副屏 Mac** | macOS 14+,任何有 HEVC 硬解的 Mac(Intel 第 7 代+ / Apple Silicon) |
+| **链路** | **Thunderbolt Bridge** 直连(推荐)或同一个 Wi-Fi |
 
-## 构建
+## 安装
+
+1. 下载 **[MacAsDisplay.dmg](https://github.com/fiacc218/MacAsDisplay/releases/latest)**
+2. 打开 DMG,把 `MacAsDisplay.app` 拖到**应用程序**文件夹 —— **两台 Mac 都要装**
+3. 双击启动。已做 Developer ID 签名 + Apple 公证,**无 Gatekeeper 警告**。
+
+## 首次启动
+
+每台 Mac 首启时选角色:
+
+- **Main Mac** —— 这台 Mac 的屏幕会被采集发送(Sender)
+- **Secondary Display** —— 这台 Mac 当副屏(Receiver)
+
+之后想换角色:菜单栏图标 → **Switch Role…**,或副屏 Receiver 全屏时按
+**ESC** 调出控制条。
+
+### 主 Mac 额外步骤
+
+- 提示时授予**录屏**权限(或点菜单栏面板里黄色 banner → *Open Screen
+  Recording settings*)。
+- 菜单栏会出现图标,点开显示状态、目标主机、Start/Stop。
+- 同一 LAN / TB Bridge 上的 Receiver 会**自动发现**,点 `Target` 右边下拉
+  直接选。
+
+## Thunderbolt Bridge(推荐)
+
+点对点,10+ Gbps,亚毫秒 RTT,不跟 Wi-Fi 抢带宽。
+
+1. 两台 Mac 用 TB3/TB4 线连起来。
+2. **系统设置 → 网络 → Thunderbolt Bridge → 详细信息 → TCP/IP →
+   配置 IPv4:使用 DHCP 并填手动地址** —— 给两台分配
+   `169.254.0.1` / `169.254.0.2`(或同一 /16 的任一对)。
+3. 验证:对方执行 `ping -c 3 169.254.0.2`。
+
+**Jumbo frames(可选):** 两边都跑 `sudo ifconfig bridge0 mtu 9000`,
+大 I-frame 就不会被拆成一百多个 1500 字节小包。
+
+## 使用
+
+1. 先在**副屏 Mac** 启动 —— 会全屏黑并开始广播身份。
+2. 再启动**主 Mac**。`Target` 会自动填充;多网卡就从下拉菜单里选。
+3. 点 **Start**。主 Mac 出现一个 30 fps 虚拟显示器,把窗口拖过去就显示在
+   副屏上。
+
+副屏上任何时候按 **ESC** 退出全屏,露出控制条(**返回全屏** /
+**切换角色** / **退出**)。
+
+## 安全模型
+
+- 控制信道用 HMAC-SHA256 + nonce 抗重放认证。
+- 内置默认 PSK,首装零配置开箱即用。
+- 视频负载**不加密**。**别在不可信网络上用。**TB Bridge 或私有 LAN 才行。
+- 想换自己的 PSK:一台机器跑
+  `head -c 32 /dev/urandom > ~/.config/macasdisplay/psk`,再 `scp` 到另一台。
+  详情见 [SECURITY.md](SECURITY.md)。
+
+## 故障排查
+
+**副屏一直黑屏。** 主 Mac 上点了 **Start** 吗?光启动是不会自动推流的。
+两边日志里都看一下 `PSK fp=...`,指纹必须一致。
+
+**授权了录屏仍报 "User denied screen capture"。** 旧版本的签名在 TCC 里
+留了条过时条目,清一下:
+```sh
+tccutil reset ScreenCapture xyz.dashuo.macasdisplay
+```
+再重新授权。**只有大版本首装时遇到一次**,之后升级都会保留授权。
+
+**副屏屏保跳出来打断画面。**
+```sh
+caffeinate -d -i -s -w $(pgrep MacAsDisplay)
+```
+
+**刘海屏 MBP 看不到菜单栏图标。** 刘海挤掉了右侧图标。用
+[Bartender](https://www.macbartender.com/) /
+[Hidden Bar](https://github.com/dwarvesf/hidden),或 `VS_AUTOSTART=1`
+跑无界面模式。
+
+## 限制
+
+- **`CGVirtualDisplay` 是私有 API**,Apple 可能随时改,不能上 App Store。
+- **不转发输入**(设计如此)。用主 Mac 的鼠标键盘,macOS 原生会跨虚拟显
+  示器路由鼠标。
+- **无音频**。
+- **每次主 Mac 会话只能开一个虚拟显示器。**
+
+## 从源码构建
+
+给贡献者看的。一般用户直接下 DMG 就好。
 
 ```sh
 git clone https://github.com/fiacc218/MacAsDisplay.git
 cd MacAsDisplay
-brew install xcodegen            # 只装一次
-./build.sh all                   # → build/Build/Products/Debug/*.app
+brew install xcodegen
+./build.sh                    # → build/Build/Products/Debug/MacAsDisplay.app
 ```
 
-完事。`build.sh` 会在 `project.yml` 改动时自动重跑 xcodegen,然后构建
-两个 scheme。常用命令:
+`build.sh` 会在 `project.yml` 变动时重新生成 xcodeproj。想用 IDE:
+`xcodegen generate && open MacAsDisplay.xcodeproj`。
 
-| 命令 | 作用 |
-|---|---|
-| `./build.sh sender` | 本机构建 Sender。 |
-| `./build.sh receiver` | 构建 Receiver,默认交叉编译 `x86_64`(给老 Intel Mac)。 |
-| `./build.sh all` | 两个都构建。 |
-| `./build.sh deploy user@old-mac` | 构建 Receiver → rsync → ad-hoc 重签 → 远端自动启动。 |
-| `CONFIG=Release ./build.sh all` | Release 配置(默认是 Debug)。 |
-| `RECEIVER_ARCH=arm64 ./build.sh receiver` | Apple Silicon 的 Receiver。 |
-| `./build.sh clean` | 清 `build/` 和重新生成的 `.xcodeproj`。 |
+改有线协议或认证相关的 PR 前请先看 [SECURITY.md](SECURITY.md)。
 
-偏爱 IDE? `xcodegen generate && open MacAsDisplay.xcodeproj` 照常能用,
-两个 scheme (**Sender** / **Receiver**) 在 Xcode 里正常出现。
-
-### 代码签名(可选,但强烈推荐)
-
-默认签名是 ad-hoc (`CODE_SIGN_IDENTITY = -`),不配置 Apple ID 也能
-`xcodebuild`。代价是 macOS TCC 每次 rebuild 都把签名身份视为新身份,
-**你得在每次 rebuild 后重新授权一次"屏幕录制 / 本地网络"**。
-
-避免做法:创建一个本地的 gitignored `Config.xcconfig`:
-
-```sh
-cp Config.xcconfig.example Config.xcconfig
-# 编辑 Config.xcconfig,填入你自己的签名身份指纹
-# (Apple Development 或 Developer ID)。
-```
-
-TCC 按签名身份绑定授权 —— 有稳定证书后 rebuild 无需重新授权。
-
-## 部署和运行
-
-### 1. Sender (在你的主 Mac 上)
-
-```sh
-./build.sh sender
-open build/Build/Products/Debug/MacAsDisplaySender.app
-```
-
-首次启动会触发 **屏幕录制** 和 **本地网络** 的 TCC 弹窗。在"系统设置"里
-授权后重启 app。
-
-Sender 是**菜单栏 app**(`LSUIElement`,无 Dock 图标)。点图标打开气泡 ——
-目标主机、开始 / 停止、状态。
-
-> **刘海屏 MBP(14"/16") 用户注意:** 菜单栏图标可能被挤到刘海后面看
-> 不见。可以用 `VS_AUTOSTART=1` 完全绕过 UI,见 [无头运行](#无头运行)。
-
-### 2. Receiver (在你的旧 Mac 上)
-
-三种方式,挑一个。
-
-**A —— 一行安装(推荐,旧 Mac 不用装 Xcode)。** 在旧 Mac 上打开
-Terminal,粘贴:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/fiacc218/MacAsDisplay/main/install.sh | sh
-```
-
-脚本会自动从 GitHub Releases 拉最新 Receiver,解 macOS quarantine,
-ad-hoc 重签,装到 `/Applications/`,启动。脚本就在 repo 根目录
-`install.sh`,50 行,建议先看一眼再跑 (`curl -fsSL ...install.sh | less`)。
-
-**B —— 在旧 Mac 上直接 build(给爱折腾的)。** 旧 Mac 装了 Xcode? 那干脆
-连 deploy 都省了:
-
-```sh
-git clone https://github.com/fiacc218/MacAsDisplay.git
-cd MacAsDisplay && brew install xcodegen && ./build.sh receiver
-open build/Build/Products/Debug/MacAsDisplayReceiver.app
-```
-
-**C —— 从主 Mac 交叉编译 + ssh 部署(开发循环用)。**
-
-```sh
-./build.sh deploy user@old-mac        # rsync 到 /Applications 并自动启动
-# 或 ./build.sh deploy user@old-mac:/自定义路径
-```
-
-> 前置条件: 旧 Mac 打开 **系统设置 → 通用 → 共享 → 远程登录
-> (Remote Login)**。建议同时把主 Mac 的公钥加到旧 Mac 的
-> `~/.ssh/authorized_keys`,这样部署不会反复问密码。
-
-Receiver 会打开一个全屏黑色窗口,每 2 秒广播一次自身能力。按 **ESC**
-退出全屏,再按 ESC 退出 app。
-
-## 首次配对(PSK)
-
-MacAsDisplay 用 32 字节预共享密钥(PSK)认证控制信道(每个控制包做
-HMAC-SHA256,基于 nonce 防重放)。首次启动时每端会自动生成 PSK 于:
-
-```
-~/.config/macasdisplay/psk
-```
-
-**把这个文件拷到另一台机器**(同路径)才能互通:
-
-```sh
-scp ~/.config/macasdisplay/psk user@receiver-mac:~/.config/macasdisplay/psk
-```
-
-两端都会在启动时打印 `PSK fp=<前 16 hex>`。**两端指纹必须一致**,否则
-控制包会被静默丢弃。
-
-临时测试可以用环境变量 `VS_PSK_HEX=<64 hex>` 覆盖文件。
-
-## 指定目标主机
-
-Sender 需要知道把包发到哪。三种方式:
-
-### 方式 A —— 菜单栏气泡(交互式)
-
-点状态栏图标,在 **Target** 里填 Receiver 的 IP,点 **Start**。
-会持久化到 `defaults`,下次启动自动填。
-
-### 方式 B —— `defaults` 命令行(脚本化)
-
-```sh
-defaults write xyz.dashuo.macasdisplay.sender VS.targetHost 192.168.1.99
-```
-
-查 Receiver IP:
-
-- **Thunderbolt Bridge:** 在 Receiver 上 `ifconfig bridge0 | grep 'inet '`
-  (通常是 `169.254.x.x` link-local)。
-- **Wi-Fi:** 在 Receiver 上 `ipconfig getifaddr en0`。
-
-### 方式 C —— 自动学习(零配置)
-
-若 Receiver 先发 Hello / Capability 给已知主机,Sender 从 `recvfrom`
-的源地址里学到对端 → 双向通。实际使用时还是用 A 或 B 设一次目标,
-自动学习主要用来应对 IP 变化。
-
-## Thunderbolt Bridge 配置(推荐)
-
-TB Bridge 是点对点线缆,10+ Gbps,亚毫秒 RTT,不和 Wi-Fi / AWDL /
-Bonjour 抢信道。
-
-1. 两台 Mac 用 TB3/TB4 线连起来。
-2. **系统设置 → 网络 → Thunderbolt Bridge → 详细信息 → TCP/IP →
-   配置 IPv4: 手动** —— 分别设 `169.254.0.1` / `169.254.0.2`
-   (或任意同一 /16 网段的一对地址)。
-3. 验证:从对面 `ping -c 3 169.254.0.2`。
-4. 把 Receiver 的 TB IP 设成 Sender 的 `VS.targetHost`。
-
-**Jumbo frames (可选):** 两端都把 `bridge0` 的 MTU 调到 9000,大 I-frame
-就不会爆成几百个 1500 字节分片,显著降低丢包敏感度。
-
-```sh
-sudo ifconfig bridge0 mtu 9000
-```
-
-## 使用
-
-1. **先启动 Receiver** —— 进入全屏黑色窗口。
-2. **启动 Sender** —— 菜单栏出现图标,`Target` 会从 Receiver 的广播里
-   自动填上。
-3. 点 **Start**。Sender 上出现一个 30fps 的新虚拟显示器,尺寸匹配
-   Receiver 面板。拖一个窗口过去,亮了。
-
-## 无头运行
-
-```sh
-VS_AUTOSTART=1 open -n /path/to/MacAsDisplaySender.app
-```
-
-Sender 不显示任何 UI,等 ~1.5 秒收到 Receiver 的 Capability 后自动开始推流。
-适合菜单栏被刘海挤掉的情况。
-
-## 疑难排查
-
-### Receiver 一直黑屏
-
-1. Sender 真的点了 **Start** 吗?(自动学习不会自动推流,你得主动启动。)
-2. 两端 PSK 指纹一致吗?检查两端日志的 `PSK fp=...`。
-3. 防火墙放行 UDP 52100 (视频) 和 52101 (控制) 了吗?
-4. 试试两端用 `VS_PSK_HEX=...` 排除 PSK 文件问题。
-
-### "用户拒绝了应用程序...捕捉的 TCC" (-3801)
-
-Sender 需要 **屏幕录制** 权限。系统设置 → 隐私与安全 → 录屏与系统录音
-→ 开关打开。如果开关已经是开的,关掉再开(TCC 缓存过期签名):
-
-```sh
-tccutil reset ScreenCapture xyz.dashuo.macasdisplay.sender
-```
-
-**重要:** 重命名过 bundle id 或换过签名身份后,Launch Services 可能
-还缓存着旧的 TCC 拒绝记录,即使你在系统设置里勾上了也没用。需要:
-
-```sh
-/System/Library/Frameworks/CoreServices.framework/Versions/Current/\
-Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister \
-  -f -R -trusted /path/to/MacAsDisplaySender.app
-```
-
-然后重启 Sender。
-
-### 旧 Mac 老进屏保
-
-```sh
-caffeinate -d -i -s -w $(pgrep MacAsDisplayReceiver)
-```
-
-在 Receiver 进程存活期间禁用屏保 / 待机 / 休眠。
-
-### 菜单栏图标看不见
-
-14"/16" MBP 的刘海会把右侧图标挤没。解决办法:
-
-- 用 [Bartender](https://www.macbartender.com/) 或 [Hidden Bar](https://github.com/dwarvesf/hidden)。
-- 用无头模式: `VS_AUTOSTART=1`。
-
-### 偶发 `-17694` 解码错误
-
-通常发生在丢包 / 网络抖动后;下一个关键帧到达后自动恢复(Receiver 会
-主动请求)。不用管。
-
-### 旧 Intel Mac 上 WindowServer 崩溃
-
-已在 MetalRenderer 修复 —— 改用 displayLink 拉帧 + 2 帧 GPU 背压。
-如果你还遇到,说明你在较旧的 commit 上,更新代码即可。
-
-## 安全模型
-
-- 控制信道 **经 PSK + HMAC-SHA256 认证** 且 **防重放**
-  (按 peer 维护 nonce 高水位)。
-- 视频负载 **未加密**。同一链路上的人可以嗅包还原画面。
-- **不要在不受信任的网络上运行。** 用 Thunderbolt Bridge 或私有局域网。
-  详见 [SECURITY.md](SECURITY.md)。
-
-## 限制
-
-- **`CGVirtualDisplay` 是 macOS 私有 API。** 运行时 `dlopen` 符号,Apple
-  随时可能改 / 移除。无法上架 App Store。
-- **不转发输入。** 刻意设计。用 Sender 自己的键鼠,macOS 原生就会把
-  光标路由到虚拟显示器。
-- **无音频。** 仅视频。
-- **每个 Sender session 只支持单个虚拟显示器。**
-- **链路差 → 关键帧变多。** Receiver 遇丢包会请求关键帧,消耗带宽。
-  Wi-Fi 可用,TB Bridge 最佳。
-
-## 贡献
-
-欢迎 Issue 和 PR。提交涉及协议 / 认证的改动前请先读
-[SECURITY.md](SECURITY.md)。
-
-## 协议
+## 许可
 
 Apache License 2.0。见 [LICENSE](LICENSE)。
 
-MacAsDisplay 与 Apple Inc. 无任何隶属或背书关系。
+本项目与 Apple Inc. 无关。

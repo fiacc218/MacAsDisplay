@@ -5,11 +5,11 @@ import AppKit
 /// Receiver 的 IP,抬眼就能看到。
 final class InfoOverlayView: NSVisualEffectView {
 
-    private let titleLabel   = NSTextField(labelWithString: "MacAsDisplay Receiver")
-    private let statusLabel  = NSTextField(labelWithString: "Waiting for Sender…")
+    private let titleLabel   = NSTextField(labelWithString: String(localized: "MacAsDisplay Receiver"))
+    private let statusLabel  = NSTextField(labelWithString: String(localized: "Waiting for Sender…"))
     private let ipStack      = NSStackView()
     private let pskLabel     = NSTextField(labelWithString: "")
-    private let hintLabel    = NSTextField(labelWithString: "Enter any IP address above into the Sender to connect · Press ESC for options (switch role / quit)")
+    private let hintLabel    = NSTextField(labelWithString: String(localized: "Enter any IP address above into the Sender to connect · Press ESC for options (switch role / quit)"))
     private let portLabel    = NSTextField(labelWithString: "")
 
     private var refreshTimer: Timer?
@@ -40,10 +40,12 @@ final class InfoOverlayView: NSVisualEffectView {
     // MARK: - Public
 
     func setPSKFingerprint(_ fp: String) {
+        // "PSK fp:" 是技术标签,不本地化 —— 前缀短且已是行业术语,无翻译增益。
         pskLabel.stringValue = "PSK fp:  \(fp)"
     }
 
     func setPorts(video: UInt16, control: UInt16) {
+        // 同上,"UDP ports:" 技术术语保持英文。
         portLabel.stringValue = "UDP ports:  \(video) · \(control)"
     }
 
@@ -91,7 +93,7 @@ final class InfoOverlayView: NSVisualEffectView {
         hintLabel.alignment = .center
 
         // 给 IP 列表一个 "标题"
-        let ipHeader = NSTextField(labelWithString: "Enter one of these addresses into the Sender:")
+        let ipHeader = NSTextField(labelWithString: String(localized: "Enter one of these addresses into the Sender:"))
         ipHeader.font = .systemFont(ofSize: 14, weight: .medium)
         ipHeader.textColor = .secondaryLabelColor
         ipHeader.alignment = .center
@@ -138,7 +140,7 @@ final class InfoOverlayView: NSVisualEffectView {
 
         let entries = InterfaceIPs.active()
         if entries.isEmpty {
-            let l = NSTextField(labelWithString: "No active network interfaces — check Wi-Fi / Thunderbolt")
+            let l = NSTextField(labelWithString: String(localized: "No active network interfaces — check Wi-Fi / Thunderbolt"))
             l.textColor = .systemRed
             l.font = .systemFont(ofSize: 16)
             l.alignment = .center
@@ -181,7 +183,7 @@ final class InfoOverlayView: NSVisualEffectView {
 final class SignalLostBadge: NSVisualEffectView {
 
     private let dot = NSView()
-    private let label = NSTextField(labelWithString: "No signal")
+    private let label = NSTextField(labelWithString: String(localized: "No signal"))
     private var blinkTimer: Timer?
 
     init() {

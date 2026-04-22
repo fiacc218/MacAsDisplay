@@ -268,11 +268,11 @@ final class ReceiverControlBar: NSVisualEffectView {
         wantsLayer   = true
         layer?.cornerRadius = 14
 
-        let ret  = Self.makeButton(title: "Return to Fullscreen",
+        let ret  = Self.makeButton(title: String(localized: "Return to Fullscreen"),
                                    target: self, action: #selector(handleReturn))
-        let role = Self.makeButton(title: "Switch Role…",
+        let role = Self.makeButton(title: String(localized: "Switch Role…"),
                                    target: self, action: #selector(handleSwitch))
-        let quit = Self.makeButton(title: "Quit",
+        let quit = Self.makeButton(title: String(localized: "Quit"),
                                    target: self, action: #selector(handleQuit))
         // 默认按钮 = Return,空格键就能回去继续看。
         ret.keyEquivalent = "\r"
