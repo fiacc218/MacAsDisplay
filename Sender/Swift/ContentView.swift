@@ -46,7 +46,12 @@ struct ContentView: View {
     }
 
     private func openScreenRecordingSettings() {
-        // 这个 URL 直达"隐私与安全 → 屏幕录制"面板,所有 macOS 13+ 都认。
+        // 先踢一下 TCC:`CGRequestScreenCaptureAccess()` 在 notDetermined 状态会弹系统
+        // "允许 / 不允许" 对话框,在 denied 状态会把 app 登记进列表(但不弹)。用户
+        // 点 Open 按钮时多半两种都可能 —— 如果系统弹框自己就冒出来了,用户一键搞定,
+        // 压根不用跳去系统设置;如果没弹(denied 或别的 CDHash 占位),系统设置面板
+        // 就是 fallback。两步一起做,永远不会让用户"点了按钮啥也没发生"。
+        controller.requestScreenRecordingPermission()
         if let url = URL(string:
             "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
@@ -76,7 +81,7 @@ struct ContentView: View {
                         Text("Screen Recording permission required")
                             .font(.callout).bold()
                     }
-                    Text("Enable MacAsDisplay under System Settings → Privacy & Security → Screen Recording, then click Start again.")
+                    Text("Click below to request access. Approve in the dialog, or enable MacAsDisplay manually under System Settings → Privacy & Security → Screen Recording.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

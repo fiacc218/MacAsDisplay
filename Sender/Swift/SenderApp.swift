@@ -200,8 +200,15 @@ final class SenderController: ObservableObject {
     ///
     /// 已经授权就跳过,避免每次启动打一条无意义日志。
     private func kickScreenRecordingRegistration() {
+        requestScreenRecordingPermission()
+    }
+
+    /// 公开版本:ContentView 的 "Open Screen Recording settings" 按钮也调这个,
+    /// 让用户点的时候能再走一次系统弹框,不用指望启动时那一次 —— 用户可能
+    /// 第一次忽略了,第二次点按钮该能看到。已授权时自然 no-op。
+    func requestScreenRecordingPermission() {
         if CGPreflightScreenCaptureAccess() { return }
-        Log.app.info("registering with TCC (Screen Recording) — system dialog may appear")
+        Log.app.info("requesting Screen Recording permission — system dialog may appear")
         _ = CGRequestScreenCaptureAccess()
     }
 
