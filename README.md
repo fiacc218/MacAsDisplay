@@ -2,143 +2,122 @@
 
 **English** | [中文](README.zh.md)
 
-Turn an older Mac into a second display for your newer Mac over Thunderbolt
-Bridge or Wi-Fi. HEVC hardware-encoded, 30 fps at native retina resolution,
-~1 frame of latency on a good link.
+Second-display app for two Macs. The older Mac becomes an extra monitor
+for the newer one over Wi-Fi or Thunderbolt Bridge.
 
-> Status: **alpha / daily-driver for the author**. Uses a private macOS API
-> (`CGVirtualDisplay`) — not shippable to the App Store, may break in future
-> macOS versions. See [Limitations](#limitations).
+> alpha · uses `CGVirtualDisplay` (private macOS API) · not App Store
+> distributable · see [Limitations](#limitations)
 
 ```
-┌──────────────┐  HEVC/UDP + HMAC ctrl   ┌──────────────┐
-│   Main Mac   │──────────────────────▶  │  Secondary   │
-│  (Sender)    │    Thunderbolt / Wi-Fi  │   Display    │
-└──────────────┘                         └──────────────┘
+┌──────────────┐   HEVC over UDP + HMAC   ┌──────────────┐
+│   Main Mac   │ ───────────────────────▶ │  Secondary   │
+│   (Sender)   │    Wi-Fi / Thunderbolt   │   Display    │
+└──────────────┘                          └──────────────┘
 ```
 
-One `.app`, two roles. Install the same DMG on both Macs, pick a role on
-first launch.
+## Highlights
 
-Works over Wi-Fi (auto-discovery on the local network) or Thunderbolt
-Bridge (higher throughput, sub-ms RTT).
-
-## Why not just use…
-
-| Tool | Why it doesn't fit |
-|---|---|
-| **Sidecar** | iPad only. |
-| **Universal Control** | Cursor sharing, not a second display. |
-| **AirPlay to Mac** | 1080p cap, higher latency. |
-| **Luna / Duet** | Commercial, subscription. |
+- **HEVC hardware encode/decode** (VideoToolbox) · 30 fps · native retina
+  resolution · ~1 frame latency on a good link
+- **Single notarized DMG** · same `.app` on both Macs · pick role on first
+  launch · Developer ID signed, no Gatekeeper prompt
+- **Zero-config pairing** · built-in PSK · HMAC-SHA256 authenticated
+  control channel with nonce replay protection
+- **Auto-discovery** · Sender finds Receivers on the local network /
+  Thunderbolt bridge via UDP broadcast
+- **Universal binary** (arm64 + x86_64) · Apple Silicon and Intel (HEVC
+  capable) supported on both sides
+- **Localized** · English / 简体中文, follows system language
+- **Free, open source** · Apache 2.0
 
 ## Requirements
 
 | | |
 |---|---|
-| **Main Mac** | macOS 14+, Apple Silicon or Intel with HEVC hardware encoder |
-| **Secondary Mac** | macOS 14+, any Mac with HEVC hardware decoder (Intel 7th-gen+ / Apple Silicon) |
-| **Link** | Shared Wi-Fi (easiest), or Thunderbolt Bridge cable |
+| **Main Mac** | macOS 14+, HEVC hardware encoder (Apple Silicon / Intel 7th-gen+) |
+| **Secondary Mac** | macOS 14+, HEVC hardware decoder (Apple Silicon / Intel 7th-gen+) |
+| **Link** | Same Wi-Fi, or a Thunderbolt 3/4 cable |
 
 ## Install
 
-1. Download **[MacAsDisplay.dmg](https://github.com/fiacc218/MacAsDisplay/releases/latest)**
-2. Open the DMG, drag `MacAsDisplay.app` to **Applications** — on **both** Macs
-3. Double-click to launch. Notarized + Developer ID signed — no Gatekeeper warning.
+1. Download **[MacAsDisplay.dmg](https://github.com/fiacc218/MacAsDisplay/releases/latest)**.
+2. Open the DMG, drag `MacAsDisplay.app` to **Applications** on **both** Macs.
+3. Double-click to launch.
 
-## First launch
+## Usage
 
-On **each** Mac, the app asks for a role:
+On each Mac, the app asks for a role on first launch:
 
-- **Main Mac** — this Mac will send its screen (Sender)
-- **Secondary Display** — this Mac becomes the extra screen (Receiver)
+- **Main Mac** — sends its screen (Sender). Lives in the menu bar.
+- **Secondary Display** — receives and renders full-screen (Receiver).
 
-You can switch later from the menu-bar icon (**Switch Role…**) or on the
-Receiver by pressing **ESC** to exit full-screen and using the control bar.
+Then:
 
-### Main Mac extras
+1. Launch on the **Secondary** first — it goes full-screen, announces
+   itself, and lists its own IPs on the idle screen.
+2. Launch on the **Main** — the Secondary's IP auto-fills in `Target`
+   (multi-interface: pick from the dropdown).
+3. Grant **Screen Recording** permission when prompted.
+4. Click **Start**. A new 30 fps virtual display appears — drag any
+   window across.
 
-- Grant **Screen Recording** when prompted (or via the yellow banner in the
-  menu-bar popover → *Open Screen Recording settings*).
-- A menu-bar icon appears. Click for status, target host, Start/Stop.
-- Receivers on the same LAN / TB bridge are **auto-discovered** — click the
-  dropdown next to `Target` and pick one.
+Role changes later: menu-bar icon → **Switch Role…**, or on the
+Receiver press **ESC** for the control bar.
 
 ## Network
 
-Both Macs on the same Wi-Fi works out of the box — just launch the
-Receiver, the Sender auto-discovers it, IPs appear in the `Target`
-dropdown. HEVC at 30 fps retina is ~20–50 Mbps, well within Wi-Fi 5+
-on a reasonable network.
+Same Wi-Fi works out of the box — auto-discovery finds the Receiver. HEVC
+at 30 fps retina is ~20–50 Mbps.
 
-### Thunderbolt Bridge (optional, for max throughput)
-
-Point-to-point cable, 10+ Gbps, sub-ms RTT, no Wi-Fi contention.
+Thunderbolt Bridge (optional, for maximum bandwidth):
 
 1. Connect both Macs with a TB3/TB4 cable.
 2. **System Settings → Network → Thunderbolt Bridge → Details → TCP/IP →
-   Configure IPv4: Using DHCP with manual address** — assign
-   `169.254.0.1` / `169.254.0.2` (or any pair on the same /16).
-3. `sudo ifconfig bridge0 mtu 9000` on both sides enables jumbo frames
-   (avoids IP fragmentation on large I-frames).
-
-## Using it
-
-1. Launch MacAsDisplay on the **Secondary Display** Mac first — it goes
-   full-screen black and starts announcing itself.
-2. Launch on the **Main Mac**. `Target` auto-fills; if multiple interfaces,
-   pick from the dropdown.
-3. Click **Start**. A new 30 fps virtual display appears — drag any window
-   across and it lights up on the other Mac.
-
-On the Receiver, press **ESC** anytime to exit full-screen and reveal a
-control bar (**Return to Fullscreen** / **Switch Role…** / **Quit**).
+   Using DHCP with manual address** — assign `169.254.0.1` / `169.254.0.2`
+   (or any pair on the same /16).
+3. `sudo ifconfig bridge0 mtu 9000` on both sides enables jumbo frames.
 
 ## Security model
 
-- Control channel authenticated with HMAC-SHA256 + nonce replay protection.
-- Ships with a built-in default PSK — zero-config on first install.
-- Video payload **is not encrypted.** Don't run this on an untrusted
-  network. Use Thunderbolt Bridge or a private LAN.
-- Want your own PSK? `head -c 32 /dev/urandom > ~/.config/macasdisplay/psk`
-  on one Mac, `scp` to the other. Details in [SECURITY.md](SECURITY.md).
+- Control channel: HMAC-SHA256 + per-peer nonce high-water, replay-safe.
+- Built-in default PSK for zero-config first install.
+- Video payload is **not** encrypted — use Wi-Fi you trust or a direct TB
+  cable. Don't run on public networks.
+- Custom PSK: `head -c 32 /dev/urandom > ~/.config/macasdisplay/psk` on
+  one Mac, `scp` to the other. See [SECURITY.md](SECURITY.md).
 
 ## Troubleshooting
 
-**Secondary Mac shows only black.** Click **Start** on the Main Mac — the
-Secondary alone doesn't trigger streaming. Check both logs for `PSK fp=...`:
-fingerprints must match.
+**Secondary shows only black.** Click **Start** on the Main Mac. Check
+both logs for `PSK fp=…` — the fingerprints must match.
 
-**"User denied screen capture" even after granting.** A stale TCC entry
-from a previous version's signature. Clear it:
+**"User denied screen capture" even after granting it.** Stale TCC entry
+from a previous signature:
 ```sh
 tccutil reset ScreenCapture xyz.dashuo.macasdisplay
 ```
-then re-grant. One-time after major-version installs; subsequent updates
-preserve the grant.
+One-time after major-version installs; subsequent updates keep the grant.
 
-**Secondary Mac screensaver interrupts playback.**
+**Screensaver on the Secondary interrupts playback.**
 ```sh
 caffeinate -d -i -s -w $(pgrep MacAsDisplay)
 ```
 
-**Menu-bar icon invisible on notched MBPs.** The notch crowds right-side
-icons. Use [Bartender](https://www.macbartender.com/) /
+**Menu-bar icon hidden behind the notch.** Use
+[Bartender](https://www.macbartender.com/) /
 [Hidden Bar](https://github.com/dwarvesf/hidden), or set
 `VS_AUTOSTART=1` to run headless.
 
 ## Limitations
 
-- **`CGVirtualDisplay` is a private macOS API.** Apple may break it; not
-  App-Store-distributable.
-- **No input forwarding** — by design. Use the Main Mac's keyboard/mouse;
+- `CGVirtualDisplay` is a private macOS API; Apple may change or remove
+  it. Cannot ship to the App Store.
+- No input forwarding — by design. Use the Main Mac's keyboard/mouse;
   macOS routes the cursor across the virtual display natively.
-- **No audio.** Video only.
-- **Single display per Main Mac session.**
+- No audio.
+- One virtual display per Main Mac session.
 
 ## Build from source
-
-For contributors. End users should just grab the DMG above.
 
 ```sh
 git clone https://github.com/fiacc218/MacAsDisplay.git
@@ -147,8 +126,8 @@ brew install xcodegen
 ./build.sh                    # → build/Build/Products/Debug/MacAsDisplay.app
 ```
 
-`build.sh` regenerates the xcodeproj from `project.yml` when needed. Prefer
-the IDE? `xcodegen generate && open MacAsDisplay.xcodeproj`.
+`build.sh` regenerates the xcodeproj from `project.yml` when needed. Or
+`xcodegen generate && open MacAsDisplay.xcodeproj` for the IDE.
 
 See [SECURITY.md](SECURITY.md) before filing PRs that touch the wire
 protocol or authentication.
